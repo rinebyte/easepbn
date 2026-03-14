@@ -1,0 +1,13 @@
+{
+  "name": "easepbn",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "dev:api": "bun run --filter api dev",
+    "dev:web": "bun run --filter web dev",
+    "db:generate": "bun run --filter api db:generate",
+    "db:migrate": "bun run --filter api db:migrate",
+    "db:seed": "bun run --filter api db:seed"
+  }
+}
