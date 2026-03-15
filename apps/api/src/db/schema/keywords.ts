@@ -1,5 +1,5 @@
 // src/db/schema/keywords.ts
-import { pgTable, uuid, varchar, timestamp, integer } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, timestamp, integer, index } from 'drizzle-orm/pg-core'
 import { schedules } from './schedules'
 
 export const keywords = pgTable('keywords', {
@@ -15,7 +15,10 @@ export const keywords = pgTable('keywords', {
   scheduleId: uuid('schedule_id').references(() => schedules.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => [
+  index('idx_keywords_schedule_id').on(table.scheduleId),
+  index('idx_keywords_schedule_status').on(table.scheduleId, table.status),
+])
 
 export type Keyword = typeof keywords.$inferSelect
 export type NewKeyword = typeof keywords.$inferInsert

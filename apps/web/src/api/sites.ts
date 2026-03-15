@@ -115,4 +115,12 @@ export const sitesApi = {
     const res = await apiClient.post(url)
     return res.data
   },
+
+  exportCsv: async (filters?: SiteFilters): Promise<Blob> => {
+    const res = await apiClient.get('/sites/export', {
+      params: filters,
+      responseType: 'blob',
+    })
+    return res.data
+  },
 }

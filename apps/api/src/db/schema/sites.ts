@@ -1,5 +1,6 @@
 // src/db/schema/sites.ts
-import { pgTable, uuid, varchar, text, timestamp, integer, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, text, timestamp, integer, jsonb, index } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 
 export const sites = pgTable('sites', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -23,7 +24,10 @@ export const sites = pgTable('sites', {
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => [
+  index('idx_sites_status').on(table.status),
+  index('idx_sites_tags').using('gin', sql`${table.tags}`),
+])
 
 export type Site = typeof sites.$inferSelect
 export type NewSite = typeof sites.$inferInsert

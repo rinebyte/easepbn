@@ -7,67 +7,43 @@ const EXHAUST_THRESHOLD = 10
 
 export class KeywordService {
   /**
-   * Get the next keyword for a schedule using least-recently-used rotation.
+   * Atomically claim the next keyword for a schedule using FOR UPDATE SKIP LOCKED.
+   * This prevents race conditions when multiple workers run concurrently.
    * Returns null if all keywords are exhausted.
    */
   static async getNextKeyword(scheduleId: string): Promise<{ id: string; keyword: string } | null> {
-    const [kw] = await db
-      .select({ id: keywords.id, keyword: keywords.keyword })
-      .from(keywords)
-      .where(
-        and(
-          eq(keywords.scheduleId, scheduleId),
-          eq(keywords.status, 'available')
-        )
+    // Atomic: SELECT + UPDATE in one query with row locking
+    const result = await db.execute(sql`
+      UPDATE keywords
+      SET
+        usage_count = usage_count + 1,
+        status = CASE WHEN usage_count + 1 >= ${EXHAUST_THRESHOLD} THEN 'exhausted' ELSE 'used' END,
+        last_used_at = NOW(),
+        updated_at = NOW()
+      WHERE id = (
+        SELECT id FROM keywords
+        WHERE schedule_id = ${scheduleId}
+          AND status IN ('available', 'used')
+        ORDER BY
+          CASE WHEN status = 'available' THEN 0 ELSE 1 END,
+          usage_count ASC,
+          last_used_at ASC NULLS FIRST
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
       )
-      .orderBy(asc(keywords.usageCount), asc(keywords.lastUsedAt))
-      .limit(1)
+      RETURNING id, keyword
+    `)
 
-    if (!kw) {
-      // Try 'used' status as fallback (still rotatable, just been used before)
-      const [usedKw] = await db
-        .select({ id: keywords.id, keyword: keywords.keyword })
-        .from(keywords)
-        .where(
-          and(
-            eq(keywords.scheduleId, scheduleId),
-            eq(keywords.status, 'used')
-          )
-        )
-        .orderBy(asc(keywords.usageCount), asc(keywords.lastUsedAt))
-        .limit(1)
-
-      return usedKw ?? null
-    }
-
-    return kw
+    const row = result[0] as { id: string; keyword: string } | undefined
+    return row ?? null
   }
 
   /**
-   * Mark a keyword as used, increment usage count.
-   * Auto-exhausts at threshold.
+   * Mark a keyword as used (now a no-op since getNextKeyword is atomic).
+   * Kept for backward compatibility.
    */
-  static async markKeywordUsed(keywordId: string): Promise<void> {
-    const [kw] = await db
-      .select()
-      .from(keywords)
-      .where(eq(keywords.id, keywordId))
-      .limit(1)
-
-    if (!kw) return
-
-    const newCount = kw.usageCount + 1
-    const newStatus = newCount >= EXHAUST_THRESHOLD ? 'exhausted' : 'used'
-
-    await db
-      .update(keywords)
-      .set({
-        usageCount: newCount,
-        status: newStatus,
-        lastUsedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(keywords.id, keywordId))
+  static async markKeywordUsed(_keywordId: string): Promise<void> {
+    // No-op: getNextKeyword now atomically updates the keyword
   }
 
   /**

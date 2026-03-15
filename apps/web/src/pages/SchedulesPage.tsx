@@ -57,6 +57,7 @@ export function SchedulesPage() {
   const [confirmDeleteSchedule, setConfirmDeleteSchedule] = useState<string | null>(null)
   const [keywordsText, setKeywordsText] = useState('')
   const [keywordImportText, setKeywordImportText] = useState('')
+  const [siteSearch, setSiteSearch] = useState('')
 
   const { data: schedules, isLoading } = useQuery({
     queryKey: ['schedules'],
@@ -158,6 +159,7 @@ export function SchedulesPage() {
     setEditingSchedule(null)
     setForm(emptyForm)
     setKeywordsText('')
+    setSiteSearch('')
     setDialogOpen(true)
   }
 
@@ -177,6 +179,7 @@ export function SchedulesPage() {
       uniqueArticlePerSite: schedule.uniqueArticlePerSite ?? false,
     })
     setKeywordsText(schedule.keywords.join('\n'))
+    setSiteSearch('')
     setDialogOpen(true)
   }
 
@@ -213,6 +216,9 @@ export function SchedulesPage() {
   }
 
   const allSites = sites?.data ?? []
+  const filteredSites = siteSearch.trim()
+    ? allSites.filter((s) => s.name.toLowerCase().includes(siteSearch.toLowerCase()))
+    : allSites
   const templateMap = new Map<string, Template>()
   for (const t of templates ?? []) templateMap.set(t.id, t)
   const isSaving = createMutation.isPending || updateMutation.isPending
@@ -244,6 +250,7 @@ export function SchedulesPage() {
               ))}
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -351,6 +358,7 @@ export function SchedulesPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -432,6 +440,12 @@ export function SchedulesPage() {
             </div>
             <div className="space-y-2">
               <Label>Target Sites</Label>
+              <Input
+                placeholder="Search sites..."
+                value={siteSearch}
+                onChange={(e) => setSiteSearch(e.target.value)}
+                className="h-8 text-sm"
+              />
               <div className="max-h-36 space-y-1.5 overflow-y-auto rounded-md border border-input p-2">
                 <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
                   <input
@@ -448,7 +462,7 @@ export function SchedulesPage() {
                   Select All ({allSites.length})
                 </label>
                 <div className="my-1 border-t border-border" />
-                {allSites.map((site) => (
+                {filteredSites.map((site) => (
                   <label key={site.id} className="flex cursor-pointer items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -621,7 +635,7 @@ export function SchedulesPage() {
           </div>
 
           {/* Keyword list */}
-          <div className="max-h-72 overflow-y-auto">
+          <div className="max-h-72 overflow-y-auto overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>

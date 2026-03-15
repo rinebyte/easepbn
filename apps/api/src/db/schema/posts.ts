@@ -1,5 +1,5 @@
 // src/db/schema/posts.ts
-import { pgTable, uuid, varchar, text, timestamp, integer, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, text, timestamp, integer, jsonb, index } from 'drizzle-orm/pg-core'
 import { articles } from './articles'
 import { sites } from './sites'
 
@@ -12,7 +12,7 @@ export const posts = pgTable('posts', {
     .notNull()
     .references(() => sites.id, { onDelete: 'cascade' }),
   status: varchar('status', { length: 20 })
-    .$type<'pending' | 'posting' | 'posted' | 'failed'>()
+    .$type<'pending' | 'posting' | 'posted' | 'failed' | 'unpublished'>()
     .default('pending')
     .notNull(),
   wpPostId: integer('wp_post_id'),
@@ -25,7 +25,12 @@ export const posts = pgTable('posts', {
   postedAt: timestamp('posted_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+}, (table) => [
+  index('idx_posts_article_id').on(table.articleId),
+  index('idx_posts_site_id').on(table.siteId),
+  index('idx_posts_status').on(table.status),
+  index('idx_posts_created_at').on(table.createdAt),
+])
 
 export type Post = typeof posts.$inferSelect
 export type NewPost = typeof posts.$inferInsert

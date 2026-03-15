@@ -42,6 +42,9 @@ export const schedulesRoutes = new Elysia({ prefix: '/schedules' })
 
       const nextRunAt = getNextRunAt(body.cronExpression)
 
+      // Warn if no keywords configured (will fail at execution time)
+      const hasKeywords = (body.keywords ?? []).filter(k => k.trim()).length > 0
+
       const [schedule] = await db
         .insert(schedules)
         .values({
@@ -50,7 +53,13 @@ export const schedulesRoutes = new Elysia({ prefix: '/schedules' })
         })
         .returning()
 
-      return { success: true, data: schedule }
+      return {
+        success: true,
+        data: schedule,
+        ...(hasKeywords ? {} : {
+          warning: 'No keywords configured. Import keywords via the Keyword Pool before enabling this schedule.',
+        }),
+      }
     },
     {
       body: t.Object({

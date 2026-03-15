@@ -5,9 +5,11 @@ import { eq } from 'drizzle-orm'
 import { db } from '../config/database'
 import { users } from '../db/schema'
 import { jwtPlugin, authMiddleware } from '../middleware/auth'
+import { authRateLimit } from '../middleware/rateLimit'
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
   .use(jwtPlugin)
+  .use(authRateLimit)
   .post(
     '/login',
     async ({ body, jwt, set }) => {

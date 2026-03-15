@@ -35,9 +35,10 @@ export const articlesApi = {
   getArticles: async (
     page = 1,
     limit = 20,
-    status?: Article['status']
+    status?: Article['status'],
+    search?: string
   ): Promise<PaginatedResponse<Article>> => {
-    const res = await apiClient.get('/articles', { params: { page, limit, status } })
+    const res = await apiClient.get('/articles', { params: { page, limit, status, search } })
     return { data: res.data.data, page: res.data.page, limit: res.data.limit, total: res.data.total ?? 0 }
   },
 
@@ -74,5 +75,18 @@ export const articlesApi = {
   getGenerationStatus: async (id: string) => {
     const res = await apiClient.get(`/articles/${id}/generation-status`)
     return res.data.data
+  },
+
+  retryArticle: async (id: string) => {
+    const res = await apiClient.post(`/articles/${id}/retry`)
+    return res.data
+  },
+
+  exportCsv: async (status?: Article['status']): Promise<Blob> => {
+    const res = await apiClient.get('/articles/export', {
+      params: { status },
+      responseType: 'blob',
+    })
+    return res.data
   },
 }

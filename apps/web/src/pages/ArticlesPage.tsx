@@ -1,6 +1,7 @@
+// src/pages/ArticlesPage.tsx
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Loader2, Eye, Layers } from 'lucide-react'
+import { Plus, Trash2, Loader2, Eye, Layers, Search, RotateCcw, Download } from 'lucide-react'
 import { articlesApi, type Article } from '@/api/articles'
 import { templatesApi } from '@/api/templates'
 import { Button } from '@/components/ui/button'
@@ -37,9 +38,19 @@ function statusVariant(status: Article['status']) {
 
 type FilterTab = 'all' | Article['status']
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function ArticlesPage() {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<FilterTab>('all')
+  const [search, setSearch] = useState('')
   const [generateOpen, setGenerateOpen] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [viewArticle, setViewArticle] = useState<Article | null>(null)
@@ -53,9 +64,9 @@ export function ArticlesPage() {
   const [bulkForm, setBulkForm] = useState({ templateId: '', keywords: '' })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['articles', articlesPage, tab],
+    queryKey: ['articles', articlesPage, tab, search],
     queryFn: () =>
-      articlesApi.getArticles(articlesPage, articlesPerPage, tab === 'all' ? undefined : tab),
+      articlesApi.getArticles(articlesPage, articlesPerPage, tab === 'all' ? undefined : tab, search || undefined),
   })
 
   const { data: templates } = useQuery({
@@ -104,6 +115,24 @@ export function ArticlesPage() {
     },
   })
 
+  const retryMutation = useMutation({
+    mutationFn: articlesApi.retryArticle,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['articles'] })
+      toast({ title: 'Article retry queued', variant: 'success' })
+    },
+    onError: () => toast({ title: 'Retry failed', variant: 'destructive' }),
+  })
+
+  async function handleExportCsv() {
+    try {
+      const blob = await articlesApi.exportCsv(tab === 'all' ? undefined : tab)
+      downloadBlob(blob, 'articles.csv')
+    } catch {
+      toast({ title: 'Export failed', variant: 'destructive' })
+    }
+  }
+
   const articles = data?.data ?? []
 
   return (
@@ -114,6 +143,10 @@ export function ArticlesPage() {
           <p className="text-sm text-muted-foreground">{data?.total ?? 0} articles</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleExportCsv}>
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)}>
             <Layers className="h-4 w-4" />
             Bulk Generate
@@ -134,6 +167,17 @@ export function ArticlesPage() {
         </TabsList>
       </Tabs>
 
+      {/* Search input */}
+      <div className="relative w-64">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search articles..."
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setArticlesPage(1) }}
+          className="pl-8"
+        />
+      </div>
+
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
@@ -143,73 +187,92 @@ export function ArticlesPage() {
               ))}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Keyword</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Tokens</TableHead>
-                  <TableHead>Cost</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {articles.length === 0 && (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
-                      No articles found.
-                    </TableCell>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Keyword</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Tokens</TableHead>
+                    <TableHead>Cost</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="w-28">Actions</TableHead>
                   </TableRow>
-                )}
-                {articles.map((article) => (
-                  <TableRow key={article.id}>
-                    <TableCell className="font-medium">
-                      <span className="block max-w-[240px] truncate">
-                        {article.title || article.focusKeyword}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{article.focusKeyword}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant(article.status)}>{article.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {article.generationTokens ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {article.generationCost ? `$${parseFloat(article.generationCost).toFixed(4)}` : '—'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {format(new Date(article.createdAt), 'MMM d')}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            setViewArticle(article)
-                            setEditContent(article.content ?? '')
-                          }}
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => setConfirmDeleteArticle(article.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {articles.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">
+                        No articles found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {articles.map((article) => (
+                    <TableRow key={article.id}>
+                      <TableCell className="font-medium">
+                        <span className="block max-w-[240px] truncate">
+                          {article.title || article.focusKeyword}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{article.focusKeyword}</TableCell>
+                      <TableCell>
+                        <Badge variant={statusVariant(article.status)}>{article.status}</Badge>
+                        {article.status === 'failed' && article.errorMessage && (
+                          <p className="mt-1 max-w-[200px] truncate text-xs text-destructive" title={article.errorMessage}>
+                            {article.errorMessage}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {article.generationTokens ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {article.generationCost ? `$${parseFloat(article.generationCost).toFixed(4)}` : '—'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {format(new Date(article.createdAt), 'MMM d')}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {article.status === 'failed' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => retryMutation.mutate(article.id)}
+                              disabled={retryMutation.isPending}
+                              title="Retry generation"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              setViewArticle(article)
+                              setEditContent(article.content ?? '')
+                            }}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => setConfirmDeleteArticle(article.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
         <Pagination

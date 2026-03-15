@@ -1,12 +1,13 @@
 // src/queue/workers/scheduledExecution.ts
 import { Worker } from 'bullmq'
-import { eq, sql, inArray } from 'drizzle-orm'
+import { eq, and, sql, inArray } from 'drizzle-orm'
 import { redis } from '../../config/redis'
 import { db } from '../../config/database'
 import { schedules, articles, posts, postLogs, sites } from '../../db/schema'
 import { articleGenerationQueue, wordpressPostingQueue } from '../queues'
 import { KeywordService } from '../../services/keyword'
 import { getVariationInstructions, generateVariationSeed } from '../../services/contentVariation'
+import { NotificationService } from '../../services/notification'
 
 interface ScheduledExecutionJob {
   scheduleId: string
@@ -65,7 +66,10 @@ export function createScheduledExecutionWorker() {
         .select({ id: sites.id })
         .from(sites)
         .where(
-          inArray(sites.id, schedule.targetSiteIds)
+          and(
+            inArray(sites.id, schedule.targetSiteIds),
+            eq(sites.status, 'active')
+          )
         )
 
       const activeSiteIds = activeSites
@@ -274,6 +278,13 @@ export function createScheduledExecutionWorker() {
         },
       })
 
+      await NotificationService.create({
+        type: 'schedule_complete',
+        title: 'Schedule Completed',
+        message: `"${schedule.name}": ${articlesGenerated} articles, ${postsQueued} posts queued`,
+        metadata: { scheduleId, articlesGenerated, postsQueued },
+      }).catch(() => {})
+
       console.log(
         `[ScheduleWorker] Schedule ${scheduleId} done in ${durationMs}ms: ` +
         `${articlesGenerated} articles, ${postsQueued} posts queued`
@@ -382,6 +393,13 @@ async function handleBlastOrchestrator(data: BlastOrchestratorJob) {
       failedCount: failed.length,
     },
   })
+
+  await NotificationService.create({
+    type: 'bulk_complete',
+    title: 'Blast Complete',
+    message: `Batch ${batchId}: ${postsQueued} posts queued, ${failed.length} failed`,
+    metadata: { batchId, postsQueued, failedCount: failed.length },
+  }).catch(() => {})
 
   console.log(`[BlastOrchestrator] Batch ${batchId} complete: ${postsQueued} posts queued`)
 }

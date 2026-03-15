@@ -2,6 +2,9 @@
 import { Elysia } from 'elysia'
 import { cors } from '@elysiajs/cors'
 import { env } from './config/env'
+import { redis } from './config/redis'
+import { db } from './config/database'
+import { sql } from 'drizzle-orm'
 import { errorHandler } from './middleware/errorHandler'
 import { authRoutes } from './routes/auth'
 import { sitesRoutes } from './routes/sites'
@@ -34,12 +37,35 @@ const app = new Elysia()
     })
   )
   .use(errorHandler)
-  // Health check (no auth required)
-  .get('/health', () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0',
-  }))
+  // Health check (no auth required) — checks Redis + DB connectivity
+  .get('/health', async () => {
+    const components: Record<string, { status: string; error?: string }> = {}
+
+    // Check database
+    try {
+      await db.execute(sql`SELECT 1`)
+      components.database = { status: 'ok' }
+    } catch (err) {
+      components.database = { status: 'error', error: err instanceof Error ? err.message : 'Unknown' }
+    }
+
+    // Check Redis
+    try {
+      await redis.ping()
+      components.redis = { status: 'ok' }
+    } catch (err) {
+      components.redis = { status: 'error', error: err instanceof Error ? err.message : 'Unknown' }
+    }
+
+    const allOk = Object.values(components).every((c) => c.status === 'ok')
+
+    return {
+      status: allOk ? 'ok' : 'degraded',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      components,
+    }
+  })
   // Mount all route groups under /api
   .group('/api', (app) =>
     app

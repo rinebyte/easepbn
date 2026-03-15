@@ -5,7 +5,7 @@ export interface Post {
   id: string
   articleId: string
   siteId: string
-  status: 'pending' | 'posting' | 'posted' | 'failed'
+  status: 'pending' | 'posting' | 'posted' | 'failed' | 'unpublished'
   wpPostId: number | null
   wpPostUrl: string | null
   wpCategoryIds: number[]
@@ -16,6 +16,8 @@ export interface Post {
   postedAt: string | null
   createdAt: string
   updatedAt: string
+  articleTitle?: string
+  siteName?: string
 }
 
 export interface CreatePostData {
@@ -45,6 +47,15 @@ export interface BlastResult {
   skippedSites: number
   keyword: string
   batchId: string
+}
+
+export interface BlastStatus {
+  batchId: string
+  total: number
+  completed: number
+  failed: number
+  pending: number
+  status: 'in_progress' | 'complete' | 'failed'
 }
 
 export interface PostFilters {
@@ -102,6 +113,19 @@ export const postsApi = {
 
   unpublishPost: async (id: string) => {
     const res = await apiClient.post(`/posts/${id}/unpublish`)
+    return res.data
+  },
+
+  getBlastStatus: async (batchId: string): Promise<BlastStatus> => {
+    const res = await apiClient.get(`/posts/blast/${batchId}/status`)
+    return res.data.data
+  },
+
+  exportCsv: async (filters?: PostFilters): Promise<Blob> => {
+    const res = await apiClient.get('/posts/export', {
+      params: filters,
+      responseType: 'blob',
+    })
     return res.data
   },
 }

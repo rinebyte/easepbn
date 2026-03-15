@@ -4,6 +4,7 @@ import { db } from '../config/database'
 import { sites, postLogs } from '../db/schema'
 import { CryptoService } from '../services/crypto'
 import { WordPressService } from '../services/wordpress'
+import { NotificationService } from '../services/notification'
 
 const BATCH_SIZE = 10
 const MAX_CONSECUTIVE_FAILURES = 3
@@ -34,7 +35,8 @@ async function checkSiteBatch(batch: typeof sites.$inferSelect[]) {
         } else {
           // Failure: increment counter
           const newFailures = site.consecutiveFailures + 1
-          const newStatus = newFailures >= MAX_CONSECUTIVE_FAILURES ? 'inactive' : site.status
+          // Use 'error' for failures (same as manual test). 'inactive' is reserved for intentional disable.
+          const newStatus = newFailures >= MAX_CONSECUTIVE_FAILURES ? 'error' : site.status
 
           await db
             .update(sites)
@@ -47,15 +49,21 @@ async function checkSiteBatch(batch: typeof sites.$inferSelect[]) {
             })
             .where(eq(sites.id, site.id))
 
-          if (newStatus === 'inactive' && site.status !== 'inactive') {
+          if (newStatus === 'error' && site.status !== 'error') {
             await db.insert(postLogs).values({
               action: 'site_auto_disabled',
               level: 'error',
-              message: `Site "${site.name}" auto-disabled after ${newFailures} consecutive health check failures: ${result.error}`,
+              message: `Site "${site.name}" marked as error after ${newFailures} consecutive health check failures: ${result.error}`,
               siteId: site.id,
               metadata: { consecutiveFailures: newFailures, lastError: result.error },
             })
-            console.log(`[HealthCheck] Site "${site.name}" auto-disabled after ${newFailures} failures`)
+            await NotificationService.create({
+              type: 'site_down',
+              title: 'Site Down',
+              message: `"${site.name}" marked as error after ${newFailures} consecutive failures`,
+              metadata: { siteId: site.id, consecutiveFailures: newFailures, lastError: result.error },
+            }).catch(() => {})
+            console.log(`[HealthCheck] Site "${site.name}" marked error after ${newFailures} failures`)
           }
         }
 
@@ -63,7 +71,7 @@ async function checkSiteBatch(batch: typeof sites.$inferSelect[]) {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error'
         const newFailures = site.consecutiveFailures + 1
-        const newStatus = newFailures >= MAX_CONSECUTIVE_FAILURES ? 'inactive' : site.status
+        const newStatus = newFailures >= MAX_CONSECUTIVE_FAILURES ? 'error' : site.status
 
         await db
           .update(sites)

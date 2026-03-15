@@ -98,6 +98,32 @@ export const sitesRoutes = new Elysia({ prefix: '/sites' })
 
     return { success: true, data: rows.map((r) => r.niche).filter(Boolean) }
   })
+  .get('/export', async ({ set }) => {
+    const rows = await db
+      .select()
+      .from(sites)
+      .orderBy(desc(sites.createdAt))
+
+    const header = 'id,name,url,status,maxPostsPerDay,postsToday,niche,tags,lastHealthCheck,createdAt\n'
+    const csv = rows.map((r) =>
+      [
+        r.id,
+        `"${r.name.replace(/"/g, '""')}"`,
+        `"${r.url.replace(/"/g, '""')}"`,
+        r.status,
+        r.maxPostsPerDay,
+        r.postsToday,
+        `"${(r.niche ?? '').replace(/"/g, '""')}"`,
+        `"${(r.tags ?? []).join(', ')}"`,
+        r.lastHealthCheck?.toISOString() ?? '',
+        r.createdAt.toISOString(),
+      ].join(',')
+    ).join('\n')
+
+    set.headers['content-type'] = 'text/csv'
+    set.headers['content-disposition'] = 'attachment; filename="sites.csv"'
+    return header + csv
+  })
   .get('/:id', async ({ params, set }) => {
     const [site] = await db.select().from(sites).where(eq(sites.id, params.id)).limit(1)
 

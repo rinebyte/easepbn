@@ -1,6 +1,6 @@
 // src/routes/articles.ts
 import { Elysia, t } from 'elysia'
-import { eq, desc, and, count } from 'drizzle-orm'
+import { eq, desc, and, count, ilike } from 'drizzle-orm'
 import { db } from '../config/database'
 import { articles } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
@@ -18,6 +18,11 @@ export const articlesRoutes = new Elysia({ prefix: '/articles' })
       const conditions = []
       if (query.status) {
         conditions.push(eq(articles.status, query.status as 'draft' | 'generating' | 'generated' | 'failed'))
+      }
+      if (query.search) {
+        conditions.push(
+          ilike(articles.title, `%${query.search}%`)
+        )
       }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined
@@ -43,9 +48,34 @@ export const articlesRoutes = new Elysia({ prefix: '/articles' })
         page: t.Optional(t.Numeric({ minimum: 1 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 200 })),
         status: t.Optional(t.String()),
+        search: t.Optional(t.String()),
       }),
     }
   )
+  .get('/export', async ({ set }) => {
+    const rows = await db
+      .select()
+      .from(articles)
+      .orderBy(desc(articles.createdAt))
+
+    const header = 'id,title,focusKeyword,status,generationTokens,generationCost,errorMessage,createdAt\n'
+    const csv = rows.map((r) =>
+      [
+        r.id,
+        `"${(r.title ?? '').replace(/"/g, '""')}"`,
+        `"${(r.focusKeyword ?? '').replace(/"/g, '""')}"`,
+        r.status,
+        r.generationTokens ?? '',
+        r.generationCost ?? '',
+        `"${(r.errorMessage ?? '').replace(/"/g, '""')}"`,
+        r.createdAt.toISOString(),
+      ].join(',')
+    ).join('\n')
+
+    set.headers['content-type'] = 'text/csv'
+    set.headers['content-disposition'] = 'attachment; filename="articles.csv"'
+    return header + csv
+  })
   .get('/:id', async ({ params, set }) => {
     const [article] = await db.select().from(articles).where(eq(articles.id, params.id)).limit(1)
 
@@ -104,6 +134,11 @@ export const articlesRoutes = new Elysia({ prefix: '/articles' })
     if (!existing) {
       set.status = 404
       return { success: false, error: 'Article not found' }
+    }
+
+    if (existing.status === 'generating') {
+      set.status = 422
+      return { success: false, error: 'Cannot delete article while it is being generated' }
     }
 
     await db.delete(articles).where(eq(articles.id, params.id))
@@ -213,6 +248,49 @@ export const articlesRoutes = new Elysia({ prefix: '/articles' })
       }),
     }
   )
+  .post('/:id/retry', async ({ params, set }) => {
+    const [article] = await db.select().from(articles).where(eq(articles.id, params.id)).limit(1)
+
+    if (!article) {
+      set.status = 404
+      return { success: false, error: 'Article not found' }
+    }
+
+    if (article.status !== 'failed') {
+      set.status = 422
+      return { success: false, error: 'Only failed articles can be retried' }
+    }
+
+    if (!article.templateId) {
+      set.status = 422
+      return { success: false, error: 'Article has no template, cannot retry generation' }
+    }
+
+    await db
+      .update(articles)
+      .set({
+        status: 'generating',
+        errorMessage: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(articles.id, params.id))
+
+    await articleGenerationQueue.add(
+      'generate-article',
+      {
+        articleId: article.id,
+        templateId: article.templateId,
+        keyword: article.focusKeyword ?? '',
+        variables: {},
+      },
+      {
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 5000 },
+      }
+    )
+
+    return { success: true, message: 'Article retry queued' }
+  })
   .get('/:id/generation-status', async ({ params, set }) => {
     const [article] = await db.select().from(articles).where(eq(articles.id, params.id)).limit(1)
 

@@ -1,12 +1,13 @@
 // src/routes/posts.ts
 import { Elysia, t } from 'elysia'
-import { eq, desc, and, inArray, count, sql } from 'drizzle-orm'
+import { eq, desc, and, inArray, count, sql, ilike } from 'drizzle-orm'
 import { db } from '../config/database'
-import { posts, articles, sites, templates } from '../db/schema'
+import { posts, articles, sites, templates, postLogs } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
 import { articleGenerationQueue, wordpressPostingQueue, scheduledExecutionQueue } from '../queue/queues'
 import { WordPressService } from '../services/wordpress'
 import { CryptoService } from '../services/crypto'
+import { redis } from '../config/redis'
 import { getVariationInstructions, generateVariationSeed } from '../services/contentVariation'
 
 export const postsRoutes = new Elysia({ prefix: '/posts' })
@@ -20,7 +21,7 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
 
       const conditions = []
       if (query.status) {
-        conditions.push(eq(posts.status, query.status as 'pending' | 'posting' | 'posted' | 'failed'))
+        conditions.push(eq(posts.status, query.status as 'pending' | 'posting' | 'posted' | 'failed' | 'unpublished'))
       }
       if (query.siteId) {
         conditions.push(eq(posts.siteId, query.siteId))
@@ -33,8 +34,27 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
 
       const [rows, [totalRow]] = await Promise.all([
         db
-          .select()
+          .select({
+            id: posts.id,
+            articleId: posts.articleId,
+            siteId: posts.siteId,
+            status: posts.status,
+            wpPostId: posts.wpPostId,
+            wpPostUrl: posts.wpPostUrl,
+            wpCategoryIds: posts.wpCategoryIds,
+            wpTagIds: posts.wpTagIds,
+            retryCount: posts.retryCount,
+            maxRetries: posts.maxRetries,
+            errorMessage: posts.errorMessage,
+            postedAt: posts.postedAt,
+            createdAt: posts.createdAt,
+            updatedAt: posts.updatedAt,
+            articleTitle: articles.title,
+            siteName: sites.name,
+          })
           .from(posts)
+          .leftJoin(articles, eq(posts.articleId, articles.id))
+          .leftJoin(sites, eq(posts.siteId, sites.id))
           .where(whereClause)
           .orderBy(desc(posts.createdAt))
           .limit(limit)
@@ -57,6 +77,45 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
       }),
     }
   )
+  .get('/export', async ({ set }) => {
+    const rows = await db
+      .select({
+        id: posts.id,
+        articleTitle: articles.title,
+        siteName: sites.name,
+        siteUrl: sites.url,
+        status: posts.status,
+        wpPostId: posts.wpPostId,
+        wpPostUrl: posts.wpPostUrl,
+        errorMessage: posts.errorMessage,
+        postedAt: posts.postedAt,
+        createdAt: posts.createdAt,
+      })
+      .from(posts)
+      .leftJoin(articles, eq(posts.articleId, articles.id))
+      .leftJoin(sites, eq(posts.siteId, sites.id))
+      .orderBy(desc(posts.createdAt))
+
+    const header = 'id,articleTitle,siteName,siteUrl,status,wpPostId,wpPostUrl,errorMessage,postedAt,createdAt\n'
+    const csv = rows.map((r) =>
+      [
+        r.id,
+        `"${(r.articleTitle ?? '').replace(/"/g, '""')}"`,
+        `"${(r.siteName ?? '').replace(/"/g, '""')}"`,
+        `"${(r.siteUrl ?? '').replace(/"/g, '""')}"`,
+        r.status,
+        r.wpPostId ?? '',
+        `"${(r.wpPostUrl ?? '').replace(/"/g, '""')}"`,
+        `"${(r.errorMessage ?? '').replace(/"/g, '""')}"`,
+        r.postedAt?.toISOString() ?? '',
+        r.createdAt.toISOString(),
+      ].join(',')
+    ).join('\n')
+
+    set.headers['content-type'] = 'text/csv'
+    set.headers['content-disposition'] = 'attachment; filename="posts.csv"'
+    return header + csv
+  })
   .post(
     '/',
     async ({ body, set }) => {
@@ -370,6 +429,8 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
       }
 
       // Phase 2: Queue blast orchestrator — waits for all articles, then posts
+      // Dynamic attempts: ~4s per article generation at 30 req/min rate limit + buffer
+      const dynamicAttempts = Math.max(60, Math.ceil(articleSitePairs.length / 30) * 8)
       await scheduledExecutionQueue.add(
         'blast-orchestrator',
         {
@@ -379,10 +440,23 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
           batchId,
         },
         {
-          delay: 15_000, // check after 15s
-          attempts: 40,  // retry up to 40x (10 min max)
+          delay: 15_000,
+          attempts: dynamicAttempts,
           backoff: { type: 'fixed', delay: 15_000 },
         }
+      )
+
+      // Store batch state in Redis for progress tracking (expire after 1h)
+      await redis.setex(
+        `easepbn:blast:${batchId}`,
+        3600,
+        JSON.stringify({
+          batchId,
+          keyword,
+          totalArticles: articleSitePairs.length,
+          articleIds: articleSitePairs.map((p) => p.articleId),
+          startedAt: new Date().toISOString(),
+        })
       )
 
       return {
@@ -408,6 +482,60 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
       }),
     }
   )
+  .get('/blast/:batchId/status', async ({ params, set }) => {
+    const raw = await redis.get(`easepbn:blast:${params.batchId}`)
+    if (!raw) {
+      set.status = 404
+      return { success: false, error: 'Blast batch not found or expired' }
+    }
+
+    const batch = JSON.parse(raw) as {
+      batchId: string
+      keyword: string
+      totalArticles: number
+      articleIds: string[]
+      startedAt: string
+    }
+
+    // Check article statuses
+    const articleRows = await db
+      .select({ id: articles.id, status: articles.status })
+      .from(articles)
+      .where(inArray(articles.id, batch.articleIds))
+
+    const statusCounts = { generating: 0, generated: 0, failed: 0, other: 0 }
+    for (const row of articleRows) {
+      if (row.status === 'generating') statusCounts.generating++
+      else if (row.status === 'generated') statusCounts.generated++
+      else if (row.status === 'failed') statusCounts.failed++
+      else statusCounts.other++
+    }
+
+    // Check how many posts were created for this batch
+    const postRows = await db
+      .select({ count: count() })
+      .from(posts)
+      .where(inArray(posts.articleId, batch.articleIds))
+
+    const done = statusCounts.generating === 0
+    const phase = done
+      ? (postRows[0]?.count ?? 0) > 0 ? 'posted' : 'posting'
+      : 'generating'
+
+    return {
+      success: true,
+      data: {
+        batchId: batch.batchId,
+        keyword: batch.keyword,
+        totalArticles: batch.totalArticles,
+        startedAt: batch.startedAt,
+        phase,
+        articles: statusCounts,
+        postsCreated: postRows[0]?.count ?? 0,
+        done,
+      },
+    }
+  })
   .post('/:id/unpublish', async ({ params, set }) => {
     const [post] = await db.select().from(posts).where(eq(posts.id, params.id)).limit(1)
 
@@ -445,11 +573,11 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
       return { success: false, error: `Failed to delete from WordPress: ${result.error}` }
     }
 
-    // Update local record
+    // Update local record — use 'unpublished' to prevent re-posting by workers
     await db
       .update(posts)
       .set({
-        status: 'pending',
+        status: 'unpublished',
         wpPostId: null,
         wpPostUrl: null,
         postedAt: null,

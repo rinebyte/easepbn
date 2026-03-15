@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Globe,
@@ -7,7 +8,6 @@ import {
   TrendingUp,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   Activity,
   Loader2,
 } from 'lucide-react'
@@ -26,6 +26,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 function StatCard({
   label,
@@ -104,9 +105,13 @@ function QueueWidget({ label, counts }: { label: string; counts: { waiting: numb
   )
 }
 
+type TimeRange = '7d' | '14d' | '30d' | '90d'
+
 export function DashboardPage() {
+  const [timeRange, setTimeRange] = useState<TimeRange>('30d')
+
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboard'],
+    queryKey: ['dashboard', timeRange],
     queryFn: analyticsApi.getDashboard,
     refetchInterval: 30_000,
   })
@@ -142,6 +147,25 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header with time range */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Overview</h2>
+          <p className="text-sm text-muted-foreground">Monitoring your PBN activity</p>
+        </div>
+        <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
+          <SelectTrigger className="w-28">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7d">Last 7 days</SelectItem>
+            <SelectItem value="14d">Last 14 days</SelectItem>
+            <SelectItem value="30d">Last 30 days</SelectItem>
+            <SelectItem value="90d">Last 90 days</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard
@@ -304,6 +328,7 @@ export function DashboardPage() {
           <CardDescription>Detailed recent posting activity</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -347,6 +372,7 @@ export function DashboardPage() {
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

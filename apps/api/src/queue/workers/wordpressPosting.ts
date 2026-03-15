@@ -7,6 +7,7 @@ import { posts, articles, sites, postLogs } from '../../db/schema'
 import { CryptoService } from '../../services/crypto'
 import { WordPressService } from '../../services/wordpress'
 import { ImageGenerationService } from '../../services/imageGeneration'
+import { NotificationService } from '../../services/notification'
 
 interface WordPressPostingJob {
   postId: string
@@ -55,6 +56,14 @@ export function createWordPressPostingWorker() {
           .update(posts)
           .set({ status: 'failed', errorMessage: 'Article generation failed', updatedAt: new Date() })
           .where(eq(posts.id, postId))
+        await writeLog({
+          action: 'post_skipped_article_failed',
+          level: 'error',
+          message: `Post ${postId} failed: article "${article.title}" generation failed`,
+          postId,
+          articleId: article.id,
+          siteId: post.siteId,
+        })
         console.log(`[PostingWorker] Article ${article.id} failed to generate, skipping post ${postId}`)
         return
       }
@@ -151,8 +160,17 @@ export function createWordPressPostingWorker() {
           }
         }
       } catch (err) {
-        // Featured image is non-critical, log and continue
-        console.log(`[PostingWorker] Featured image failed for post ${postId}:`, err instanceof Error ? err.message : err)
+        const imgError = err instanceof Error ? err.message : String(err)
+        await writeLog({
+          action: 'featured_image_failed',
+          level: 'warn',
+          message: `Featured image upload failed for post ${postId}: ${imgError}`,
+          postId,
+          articleId: article.id,
+          siteId: site.id,
+          metadata: { error: imgError },
+        })
+        console.log(`[PostingWorker] Featured image failed for post ${postId}:`, imgError)
       }
 
       const durationMs = Date.now() - startTime
@@ -236,6 +254,16 @@ export function createWordPressPostingWorker() {
       postId,
       metadata: { retryCount: newRetryCount, isFinalFailure },
     })
+
+    // Notify on final failure
+    if (isFinalFailure) {
+      await NotificationService.create({
+        type: 'generation_failed',
+        title: 'Post Failed',
+        message: `Post ${postId} failed permanently: ${err.message}`,
+        metadata: { postId, retryCount: newRetryCount },
+      }).catch(() => {}) // Don't let notification failure break the flow
+    }
 
     // Re-throw so BullMQ can retry if we haven't hit max attempts
     if (!isFinalFailure) {
