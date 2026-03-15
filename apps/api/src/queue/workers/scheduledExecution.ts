@@ -12,11 +12,23 @@ interface ScheduledExecutionJob {
   scheduleId: string
 }
 
+interface BlastOrchestratorJob {
+  articleSitePairs: { articleId: string; siteId: string }[]
+  categoryNames: string[]
+  tagNames: string[]
+  batchId: string
+}
+
 export function createScheduledExecutionWorker() {
-  const worker = new Worker<ScheduledExecutionJob>(
+  const worker = new Worker<ScheduledExecutionJob | BlastOrchestratorJob>(
     'scheduled-execution',
     async (job) => {
-      const { scheduleId } = job.data
+      // Route to blast orchestrator if applicable
+      if (job.name === 'blast-orchestrator') {
+        return handleBlastOrchestrator(job.data as BlastOrchestratorJob)
+      }
+
+      const { scheduleId } = job.data as ScheduledExecutionJob
       const startTime = Date.now()
 
       console.log(`[ScheduleWorker] Executing schedule ${scheduleId}`)
@@ -292,4 +304,84 @@ export function createScheduledExecutionWorker() {
   })
 
   return worker
+}
+
+async function handleBlastOrchestrator(data: BlastOrchestratorJob) {
+  const { articleSitePairs, categoryNames, tagNames, batchId } = data
+
+  console.log(`[BlastOrchestrator] Checking ${articleSitePairs.length} articles (batch: ${batchId})`)
+
+  // Check all article statuses
+  const articleIds = articleSitePairs.map((p) => p.articleId)
+  const articleRows = await db
+    .select({ id: articles.id, status: articles.status })
+    .from(articles)
+    .where(inArray(articles.id, articleIds))
+
+  const statusMap = new Map(articleRows.map((a) => [a.id, a.status]))
+
+  const generating = articleSitePairs.filter((p) => statusMap.get(p.articleId) === 'generating')
+  const generated = articleSitePairs.filter((p) => statusMap.get(p.articleId) === 'generated')
+  const failed = articleSitePairs.filter((p) => statusMap.get(p.articleId) === 'failed')
+
+  console.log(
+    `[BlastOrchestrator] Status: ${generated.length} generated, ${generating.length} generating, ${failed.length} failed`
+  )
+
+  // If any still generating, throw to retry
+  if (generating.length > 0) {
+    throw new Error(
+      `${generating.length}/${articleSitePairs.length} articles still generating, waiting...`
+    )
+  }
+
+  // All done (generated or failed) — proceed with posting
+  let postsQueued = 0
+
+  for (const pair of generated) {
+    const [post] = await db
+      .insert(posts)
+      .values({
+        articleId: pair.articleId,
+        siteId: pair.siteId,
+        status: 'pending',
+      })
+      .returning()
+
+    if (!post) continue
+
+    await wordpressPostingQueue.add(
+      'post-to-wordpress',
+      {
+        postId: post.id,
+        categoryNames,
+        tagNames,
+      },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 10_000 },
+      }
+    )
+
+    postsQueued++
+  }
+
+  // Log failed articles
+  if (failed.length > 0) {
+    console.warn(`[BlastOrchestrator] ${failed.length} articles failed generation, skipped posting`)
+  }
+
+  await db.insert(postLogs).values({
+    action: 'blast_completed',
+    level: failed.length > 0 ? 'warn' : 'info',
+    message: `Blast batch ${batchId}: ${postsQueued} posts queued, ${failed.length} failed`,
+    metadata: {
+      batchId,
+      totalArticles: articleSitePairs.length,
+      postsQueued,
+      failedCount: failed.length,
+    },
+  })
+
+  console.log(`[BlastOrchestrator] Batch ${batchId} complete: ${postsQueued} posts queued`)
 }

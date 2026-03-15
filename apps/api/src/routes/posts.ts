@@ -4,7 +4,7 @@ import { eq, desc, and, inArray, count, sql } from 'drizzle-orm'
 import { db } from '../config/database'
 import { posts, articles, sites, templates } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
-import { articleGenerationQueue, wordpressPostingQueue } from '../queue/queues'
+import { articleGenerationQueue, wordpressPostingQueue, scheduledExecutionQueue } from '../queue/queues'
 import { WordPressService } from '../services/wordpress'
 import { CryptoService } from '../services/crypto'
 import { getVariationInstructions, generateVariationSeed } from '../services/contentVariation'
@@ -301,7 +301,7 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
       }),
     }
   )
-  // Blast Post: generate unique article per site and post to all selected PBNs
+  // Blast Post: generate unique article per site, wait for all, then post
   .post(
     '/blast',
     async ({ body, set }) => {
@@ -330,16 +330,14 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
       const keyword = body.keyword
       const categoryNames = body.categoryNames ?? []
       const tagNames = body.tagNames ?? []
-      const spreadWindowMs = (body.spreadWindowMinutes ?? 60) * 60 * 1000
 
-      let articlesCreated = 0
-      let postsQueued = 0
+      // Phase 1: Create all article records and queue generation
+      const articleSitePairs: { articleId: string; siteId: string }[] = []
 
       for (let i = 0; i < targetSites.length; i++) {
         const site = targetSites[i]!
         const variationInstructions = getVariationInstructions(i, targetSites.length, batchId)
 
-        // Create article record per site
         const [article] = await db
           .insert(articles)
           .values({
@@ -352,9 +350,7 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
           .returning()
 
         if (!article) continue
-        articlesCreated++
 
-        // Queue article generation with variation
         await articleGenerationQueue.add(
           'generate-article',
           {
@@ -370,47 +366,30 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
           }
         )
 
-        // Create post record
-        const [post] = await db
-          .insert(posts)
-          .values({
-            articleId: article.id,
-            siteId: site.id,
-            status: 'pending',
-          })
-          .returning()
-
-        if (!post) continue
-        postsQueued++
-
-        // Staggered posting delay: 10s base + stagger between sites
-        // Worker auto-retries if article isn't generated yet
-        const baseDelay = 10 * 1000
-        const stagger = i * 5 * 1000
-        const randomSpread = targetSites.length > 5 ? Math.random() * spreadWindowMs : 0
-        const delay = baseDelay + stagger + randomSpread
-
-        await wordpressPostingQueue.add(
-          'post-to-wordpress',
-          {
-            postId: post.id,
-            categoryNames,
-            tagNames,
-          },
-          {
-            delay: Math.round(delay),
-            attempts: 6,
-            backoff: { type: 'exponential', delay: 15_000 },
-          }
-        )
+        articleSitePairs.push({ articleId: article.id, siteId: site.id })
       }
+
+      // Phase 2: Queue blast orchestrator — waits for all articles, then posts
+      await scheduledExecutionQueue.add(
+        'blast-orchestrator',
+        {
+          articleSitePairs,
+          categoryNames,
+          tagNames,
+          batchId,
+        },
+        {
+          delay: 15_000, // check after 15s
+          attempts: 40,  // retry up to 40x (10 min max)
+          backoff: { type: 'fixed', delay: 15_000 },
+        }
+      )
 
       return {
         success: true,
-        message: `Blast started: ${articlesCreated} unique articles generating, ${postsQueued} posts queued across ${targetSites.length} sites`,
+        message: `Blast started: ${articleSitePairs.length} unique articles generating across ${targetSites.length} sites. Posts will be created automatically once all articles are ready.`,
         data: {
-          articlesCreated,
-          postsQueued,
+          articlesCreated: articleSitePairs.length,
           activeSites: targetSites.length,
           skippedSites: body.siteIds.length - targetSites.length,
           keyword,
@@ -426,7 +405,6 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
         variables: t.Optional(t.Record(t.String(), t.String())),
         categoryNames: t.Optional(t.Array(t.String())),
         tagNames: t.Optional(t.Array(t.String())),
-        spreadWindowMinutes: t.Optional(t.Number({ minimum: 1, maximum: 1440 })),
       }),
     }
   )
