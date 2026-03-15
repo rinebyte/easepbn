@@ -38,7 +38,7 @@ export const articlesApi = {
     status?: Article['status']
   ): Promise<PaginatedResponse<Article>> => {
     const res = await apiClient.get('/articles', { params: { page, limit, status } })
-    return { data: res.data.data, page: res.data.page, limit: res.data.limit }
+    return { data: res.data.data, page: res.data.page, limit: res.data.limit, total: res.data.total ?? 0 }
   },
 
   getArticle: async (id: string): Promise<Article> => {

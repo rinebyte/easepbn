@@ -1,6 +1,6 @@
 // src/routes/sites.ts
 import { Elysia, t } from 'elysia'
-import { eq, desc, inArray, ilike, or, sql, and } from 'drizzle-orm'
+import { eq, desc, inArray, ilike, or, sql, and, count } from 'drizzle-orm'
 import { db } from '../config/database'
 import { sites } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
@@ -41,18 +41,26 @@ export const sitesRoutes = new Elysia({ prefix: '/sites' })
         conditions.push(sql`${sites.tags} @> ${JSON.stringify([query.tag])}::jsonb`)
       }
 
-      const rows = await db
-        .select()
-        .from(sites)
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(desc(sites.createdAt))
-        .limit(limit)
-        .offset(offset)
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+      const [rows, [totalRow]] = await Promise.all([
+        db
+          .select()
+          .from(sites)
+          .where(whereClause)
+          .orderBy(desc(sites.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ count: count() })
+          .from(sites)
+          .where(whereClause),
+      ])
 
       // Strip encrypted credentials from response
       const data = rows.map(({ username: _u, applicationPassword: _ap, ...rest }: any) => rest)
 
-      return { success: true, data, page, limit }
+      return { success: true, data, page, limit, total: totalRow?.count ?? 0 }
     },
     {
       query: t.Object({

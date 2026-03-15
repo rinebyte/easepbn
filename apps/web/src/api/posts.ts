@@ -60,7 +60,7 @@ export const postsApi = {
     filters?: PostFilters
   ): Promise<PaginatedResponse<Post>> => {
     const res = await apiClient.get('/posts', { params: { page, limit, ...filters } })
-    return { data: res.data.data, page: res.data.page, limit: res.data.limit }
+    return { data: res.data.data, page: res.data.page, limit: res.data.limit, total: res.data.total ?? 0 }
   },
 
   createPost: async (data: CreatePostData) => {

@@ -21,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Pagination } from '@/components/ui/pagination'
 import { toast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 
@@ -38,6 +39,7 @@ export function PostsPage() {
   const queryClient = useQueryClient()
   const [postOpen, setPostOpen] = useState(false)
   const [blastOpen, setBlastOpen] = useState(false)
+  const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState<Post['status'] | 'all'>('all')
   const [siteFilter, setSiteFilter] = useState<string>('all')
   const [selectedArticleId, setSelectedArticleId] = useState('')
@@ -49,10 +51,11 @@ export function PostsPage() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [confirmUnpublish, setConfirmUnpublish] = useState<string | null>(null)
 
+  const postsPerPage = 20
   const { data, isLoading } = useQuery({
-    queryKey: ['posts', statusFilter, siteFilter],
+    queryKey: ['posts', page, statusFilter, siteFilter],
     queryFn: () =>
-      postsApi.getPosts(1, 50, {
+      postsApi.getPosts(page, postsPerPage, {
         status: statusFilter === 'all' ? undefined : statusFilter,
         siteId: siteFilter === 'all' ? undefined : siteFilter,
       }),
@@ -186,7 +189,7 @@ export function PostsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Posts</h2>
-          <p className="text-sm text-muted-foreground">{posts.length} posts</p>
+          <p className="text-sm text-muted-foreground">{data?.total ?? 0} posts</p>
         </div>
         <div className="flex gap-2">
           {/* Phase 4: Bulk actions */}
@@ -228,7 +231,7 @@ export function PostsPage() {
 
       {/* Filters */}
       <div className="flex gap-3">
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as Post['status'] | 'all')}>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v as Post['status'] | 'all'); setPage(1) }}>
           <SelectTrigger className="w-36">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
@@ -240,7 +243,7 @@ export function PostsPage() {
             <SelectItem value="failed">Failed</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={siteFilter} onValueChange={setSiteFilter}>
+        <Select value={siteFilter} onValueChange={(v) => { setSiteFilter(v); setPage(1) }}>
           <SelectTrigger className="w-44">
             <SelectValue placeholder="All sites" />
           </SelectTrigger>
@@ -365,6 +368,13 @@ export function PostsPage() {
             </Table>
           )}
         </CardContent>
+        <Pagination
+          page={page}
+          totalPages={Math.ceil((data?.total ?? 0) / postsPerPage)}
+          total={data?.total ?? 0}
+          limit={postsPerPage}
+          onPageChange={setPage}
+        />
       </Card>
 
       {/* New Post Dialog */}

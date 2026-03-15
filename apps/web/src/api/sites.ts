@@ -32,6 +32,7 @@ export interface PaginatedResponse<T> {
   data: T[]
   page: number
   limit: number
+  total: number
 }
 
 export interface SiteFilters {
@@ -44,7 +45,7 @@ export interface SiteFilters {
 export const sitesApi = {
   getSites: async (page = 1, limit = 20, filters?: SiteFilters): Promise<PaginatedResponse<Site>> => {
     const res = await apiClient.get('/sites', { params: { page, limit, ...filters } })
-    return { data: res.data.data, page: res.data.page, limit: res.data.limit }
+    return { data: res.data.data, page: res.data.page, limit: res.data.limit, total: res.data.total ?? 0 }
   },
 
   getSite: async (id: string): Promise<Site> => {

@@ -32,6 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Pagination } from '@/components/ui/pagination'
 import { toast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 
@@ -86,6 +87,8 @@ export function SitesPage() {
   const [tagFilter, setTagFilter] = useState<string>('all')
   const [importCsv, setImportCsv] = useState('')
   const [bulkTagValue, setBulkTagValue] = useState('')
+  const [sitesPage, setSitesPage] = useState(1)
+  const sitesPerPage = 20
 
   const filters: SiteFilters = {}
   if (searchQuery) filters.search = searchQuery
@@ -94,8 +97,8 @@ export function SitesPage() {
   if (tagFilter !== 'all') filters.tag = tagFilter
 
   const { data, isLoading } = useQuery({
-    queryKey: ['sites', filters],
-    queryFn: () => sitesApi.getSites(1, 200, filters),
+    queryKey: ['sites', sitesPage, filters],
+    queryFn: () => sitesApi.getSites(sitesPage, sitesPerPage, filters),
   })
 
   const { data: tags } = useQuery({
@@ -263,7 +266,7 @@ export function SitesPage() {
         <div>
           <h2 className="text-lg font-semibold">Sites</h2>
           <p className="text-sm text-muted-foreground">
-            {sites.length} WordPress sites
+            {data?.total ?? 0} WordPress sites
           </p>
         </div>
         <div className="flex gap-2">
@@ -317,11 +320,11 @@ export function SitesPage() {
           <Input
             placeholder="Search sites..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => { setSearchQuery(e.target.value); setSitesPage(1) }}
             className="pl-9"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setSitesPage(1) }}>
           <SelectTrigger className="w-32">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -333,7 +336,7 @@ export function SitesPage() {
           </SelectContent>
         </Select>
         {(niches ?? []).length > 0 && (
-          <Select value={nicheFilter} onValueChange={setNicheFilter}>
+          <Select value={nicheFilter} onValueChange={(v) => { setNicheFilter(v); setSitesPage(1) }}>
             <SelectTrigger className="w-36">
               <SelectValue placeholder="Niche" />
             </SelectTrigger>
@@ -346,7 +349,7 @@ export function SitesPage() {
           </Select>
         )}
         {(tags ?? []).length > 0 && (
-          <Select value={tagFilter} onValueChange={setTagFilter}>
+          <Select value={tagFilter} onValueChange={(v) => { setTagFilter(v); setSitesPage(1) }}>
             <SelectTrigger className="w-32">
               <SelectValue placeholder="Tag" />
             </SelectTrigger>
@@ -497,6 +500,13 @@ export function SitesPage() {
             </Table>
           )}
         </CardContent>
+        <Pagination
+          page={sitesPage}
+          totalPages={Math.ceil((data?.total ?? 0) / sitesPerPage)}
+          total={data?.total ?? 0}
+          limit={sitesPerPage}
+          onPageChange={setSitesPage}
+        />
       </Card>
 
       {/* Add/Edit Dialog */}

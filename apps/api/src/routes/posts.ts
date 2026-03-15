@@ -1,6 +1,6 @@
 // src/routes/posts.ts
 import { Elysia, t } from 'elysia'
-import { eq, desc, and, inArray } from 'drizzle-orm'
+import { eq, desc, and, inArray, count, sql } from 'drizzle-orm'
 import { db } from '../config/database'
 import { posts, articles, sites, templates } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
@@ -29,15 +29,23 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
         conditions.push(eq(posts.articleId, query.articleId))
       }
 
-      const rows = await db
-        .select()
-        .from(posts)
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(desc(posts.createdAt))
-        .limit(limit)
-        .offset(offset)
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
-      return { success: true, data: rows, page, limit }
+      const [rows, [totalRow]] = await Promise.all([
+        db
+          .select()
+          .from(posts)
+          .where(whereClause)
+          .orderBy(desc(posts.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ count: count() })
+          .from(posts)
+          .where(whereClause),
+      ])
+
+      return { success: true, data: rows, page, limit, total: totalRow?.count ?? 0 }
     },
     {
       query: t.Object({
@@ -375,10 +383,11 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
         if (!post) continue
         postsQueued++
 
-        // Staggered posting delay: 90s base (wait for article gen) + stagger between sites
-        const baseDelay = 90 * 1000
-        const stagger = i * 30 * 1000
-        const randomSpread = targetSites.length > 1 ? Math.random() * spreadWindowMs : 0
+        // Staggered posting delay: 10s base + stagger between sites
+        // Worker auto-retries if article isn't generated yet
+        const baseDelay = 10 * 1000
+        const stagger = i * 5 * 1000
+        const randomSpread = targetSites.length > 5 ? Math.random() * spreadWindowMs : 0
         const delay = baseDelay + stagger + randomSpread
 
         await wordpressPostingQueue.add(

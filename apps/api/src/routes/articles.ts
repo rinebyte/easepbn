@@ -1,6 +1,6 @@
 // src/routes/articles.ts
 import { Elysia, t } from 'elysia'
-import { eq, desc, and } from 'drizzle-orm'
+import { eq, desc, and, count } from 'drizzle-orm'
 import { db } from '../config/database'
 import { articles } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
@@ -20,15 +20,23 @@ export const articlesRoutes = new Elysia({ prefix: '/articles' })
         conditions.push(eq(articles.status, query.status as 'draft' | 'generating' | 'generated' | 'failed'))
       }
 
-      const rows = await db
-        .select()
-        .from(articles)
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(desc(articles.createdAt))
-        .limit(limit)
-        .offset(offset)
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
-      return { success: true, data: rows, page, limit }
+      const [rows, [totalRow]] = await Promise.all([
+        db
+          .select()
+          .from(articles)
+          .where(whereClause)
+          .orderBy(desc(articles.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ count: count() })
+          .from(articles)
+          .where(whereClause),
+      ])
+
+      return { success: true, data: rows, page, limit, total: totalRow?.count ?? 0 }
     },
     {
       query: t.Object({

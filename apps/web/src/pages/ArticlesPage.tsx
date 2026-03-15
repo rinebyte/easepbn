@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Pagination } from '@/components/ui/pagination'
 import { toast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 
@@ -44,15 +45,17 @@ export function ArticlesPage() {
   const [viewArticle, setViewArticle] = useState<Article | null>(null)
   const [confirmDeleteArticle, setConfirmDeleteArticle] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
+  const [articlesPage, setArticlesPage] = useState(1)
+  const articlesPerPage = 20
 
   // Generate form state
   const [genForm, setGenForm] = useState({ templateId: '', keyword: '' })
   const [bulkForm, setBulkForm] = useState({ templateId: '', keywords: '' })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['articles', tab],
+    queryKey: ['articles', articlesPage, tab],
     queryFn: () =>
-      articlesApi.getArticles(1, 50, tab === 'all' ? undefined : tab),
+      articlesApi.getArticles(articlesPage, articlesPerPage, tab === 'all' ? undefined : tab),
   })
 
   const { data: templates } = useQuery({
@@ -108,7 +111,7 @@ export function ArticlesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Articles</h2>
-          <p className="text-sm text-muted-foreground">{articles.length} articles</p>
+          <p className="text-sm text-muted-foreground">{data?.total ?? 0} articles</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)}>
@@ -122,7 +125,7 @@ export function ArticlesPage() {
         </div>
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as FilterTab)}>
+      <Tabs value={tab} onValueChange={(v) => { setTab(v as FilterTab); setArticlesPage(1) }}>
         <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="draft">Draft</TabsTrigger>
@@ -209,6 +212,13 @@ export function ArticlesPage() {
             </Table>
           )}
         </CardContent>
+        <Pagination
+          page={articlesPage}
+          totalPages={Math.ceil((data?.total ?? 0) / articlesPerPage)}
+          total={data?.total ?? 0}
+          limit={articlesPerPage}
+          onPageChange={setArticlesPage}
+        />
       </Card>
 
       {/* Generate Dialog */}
