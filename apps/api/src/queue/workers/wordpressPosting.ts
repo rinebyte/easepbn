@@ -44,6 +44,25 @@ export function createWordPressPostingWorker() {
       const [article] = await db.select().from(articles).where(eq(articles.id, post.articleId)).limit(1)
       if (!article) throw new Error(`Article ${post.articleId} not found`)
 
+      // Wait for article generation to complete
+      if (article.status === 'generating') {
+        console.log(`[PostingWorker] Article ${article.id} still generating, will retry post ${postId}`)
+        throw new Error('Article still generating, waiting for completion')
+      }
+
+      if (article.status === 'failed') {
+        await db
+          .update(posts)
+          .set({ status: 'failed', errorMessage: 'Article generation failed', updatedAt: new Date() })
+          .where(eq(posts.id, postId))
+        console.log(`[PostingWorker] Article ${article.id} failed to generate, skipping post ${postId}`)
+        return
+      }
+
+      if (article.status !== 'generated') {
+        throw new Error(`Article status is '${article.status}', expected 'generated'`)
+      }
+
       const [site] = await db.select().from(sites).where(eq(sites.id, post.siteId)).limit(1)
       if (!site) throw new Error(`Site ${post.siteId} not found`)
 

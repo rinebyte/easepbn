@@ -375,10 +375,10 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
         if (!post) continue
         postsQueued++
 
-        // Staggered posting delay: 5min base + spread
-        const baseDelay = 5 * 60 * 1000
+        // Staggered posting delay: 90s base (wait for article gen) + stagger between sites
+        const baseDelay = 90 * 1000
         const stagger = i * 30 * 1000
-        const randomSpread = Math.random() * spreadWindowMs
+        const randomSpread = targetSites.length > 1 ? Math.random() * spreadWindowMs : 0
         const delay = baseDelay + stagger + randomSpread
 
         await wordpressPostingQueue.add(
@@ -390,8 +390,8 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
           },
           {
             delay: Math.round(delay),
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 10_000 },
+            attempts: 6,
+            backoff: { type: 'exponential', delay: 15_000 },
           }
         )
       }
