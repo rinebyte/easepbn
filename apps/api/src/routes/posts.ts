@@ -2,11 +2,12 @@
 import { Elysia, t } from 'elysia'
 import { eq, desc, and, inArray } from 'drizzle-orm'
 import { db } from '../config/database'
-import { posts, articles, sites } from '../db/schema'
+import { posts, articles, sites, templates } from '../db/schema'
 import { authMiddleware } from '../middleware/auth'
-import { wordpressPostingQueue } from '../queue/queues'
+import { articleGenerationQueue, wordpressPostingQueue } from '../queue/queues'
 import { WordPressService } from '../services/wordpress'
 import { CryptoService } from '../services/crypto'
+import { getVariationInstructions, generateVariationSeed } from '../services/contentVariation'
 
 export const postsRoutes = new Elysia({ prefix: '/posts' })
   .use(authMiddleware)
@@ -289,6 +290,134 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
         status: t.Optional(t.String()),
         siteId: t.Optional(t.String()),
         postIds: t.Optional(t.Array(t.String())),
+      }),
+    }
+  )
+  // Blast Post: generate unique article per site and post to all selected PBNs
+  .post(
+    '/blast',
+    async ({ body, set }) => {
+      // Validate template
+      const [template] = await db.select().from(templates).where(eq(templates.id, body.templateId)).limit(1)
+      if (!template) {
+        set.status = 404
+        return { success: false, error: 'Template not found' }
+      }
+
+      // Validate and filter to active sites only
+      const targetSites = await db
+        .select()
+        .from(sites)
+        .where(and(
+          inArray(sites.id, body.siteIds),
+          eq(sites.status, 'active')
+        ))
+
+      if (targetSites.length === 0) {
+        set.status = 422
+        return { success: false, error: 'No active sites found in selection' }
+      }
+
+      const batchId = generateVariationSeed()
+      const keyword = body.keyword
+      const categoryNames = body.categoryNames ?? []
+      const tagNames = body.tagNames ?? []
+      const spreadWindowMs = (body.spreadWindowMinutes ?? 60) * 60 * 1000
+
+      let articlesCreated = 0
+      let postsQueued = 0
+
+      for (let i = 0; i < targetSites.length; i++) {
+        const site = targetSites[i]!
+        const variationInstructions = getVariationInstructions(i, targetSites.length, batchId)
+
+        // Create article record per site
+        const [article] = await db
+          .insert(articles)
+          .values({
+            title: `Generating: ${keyword}`,
+            content: '',
+            focusKeyword: keyword,
+            templateId: body.templateId,
+            status: 'generating',
+          })
+          .returning()
+
+        if (!article) continue
+        articlesCreated++
+
+        // Queue article generation with variation
+        await articleGenerationQueue.add(
+          'generate-article',
+          {
+            articleId: article.id,
+            templateId: body.templateId,
+            keyword,
+            variables: body.variables ?? {},
+            variationInstructions,
+          },
+          {
+            attempts: 2,
+            backoff: { type: 'exponential', delay: 5000 },
+          }
+        )
+
+        // Create post record
+        const [post] = await db
+          .insert(posts)
+          .values({
+            articleId: article.id,
+            siteId: site.id,
+            status: 'pending',
+          })
+          .returning()
+
+        if (!post) continue
+        postsQueued++
+
+        // Staggered posting delay: 5min base + spread
+        const baseDelay = 5 * 60 * 1000
+        const stagger = i * 30 * 1000
+        const randomSpread = Math.random() * spreadWindowMs
+        const delay = baseDelay + stagger + randomSpread
+
+        await wordpressPostingQueue.add(
+          'post-to-wordpress',
+          {
+            postId: post.id,
+            categoryNames,
+            tagNames,
+          },
+          {
+            delay: Math.round(delay),
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 10_000 },
+          }
+        )
+      }
+
+      return {
+        success: true,
+        message: `Blast started: ${articlesCreated} unique articles generating, ${postsQueued} posts queued across ${targetSites.length} sites`,
+        data: {
+          articlesCreated,
+          postsQueued,
+          activeSites: targetSites.length,
+          skippedSites: body.siteIds.length - targetSites.length,
+          keyword,
+          batchId,
+        },
+      }
+    },
+    {
+      body: t.Object({
+        keyword: t.String({ minLength: 1 }),
+        templateId: t.String(),
+        siteIds: t.Array(t.String(), { minItems: 1 }),
+        variables: t.Optional(t.Record(t.String(), t.String())),
+        categoryNames: t.Optional(t.Array(t.String())),
+        tagNames: t.Optional(t.Array(t.String())),
+        spreadWindowMinutes: t.Optional(t.Number({ minimum: 1, maximum: 1440 })),
       }),
     }
   )

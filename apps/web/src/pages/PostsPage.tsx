@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, RotateCcw, ExternalLink, Loader2, XCircle } from 'lucide-react'
+import { Plus, Trash2, RotateCcw, ExternalLink, Loader2, XCircle, Zap } from 'lucide-react'
 import { postsApi, type Post } from '@/api/posts'
 import { articlesApi, type Article } from '@/api/articles'
 import { sitesApi, type Site } from '@/api/sites'
+import { templatesApi } from '@/api/templates'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -34,10 +36,14 @@ function statusVariant(status: Post['status']) {
 export function PostsPage() {
   const queryClient = useQueryClient()
   const [postOpen, setPostOpen] = useState(false)
+  const [blastOpen, setBlastOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState<Post['status'] | 'all'>('all')
   const [siteFilter, setSiteFilter] = useState<string>('all')
   const [selectedArticleId, setSelectedArticleId] = useState('')
   const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([])
+  const [blastKeyword, setBlastKeyword] = useState('')
+  const [blastTemplateId, setBlastTemplateId] = useState('')
+  const [blastSiteIds, setBlastSiteIds] = useState<string[]>([])
 
   const { data, isLoading } = useQuery({
     queryKey: ['posts', statusFilter, siteFilter],
@@ -56,6 +62,29 @@ export function PostsPage() {
   const { data: sitesData } = useQuery({
     queryKey: ['sites'],
     queryFn: () => sitesApi.getSites(1, 200),
+  })
+
+  const { data: templatesData } = useQuery({
+    queryKey: ['templates'],
+    queryFn: () => templatesApi.getTemplates(),
+  })
+
+  const blastMutation = useMutation({
+    mutationFn: postsApi.blastPost,
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] })
+      queryClient.invalidateQueries({ queryKey: ['articles-generated'] })
+      setBlastOpen(false)
+      setBlastKeyword('')
+      setBlastTemplateId('')
+      setBlastSiteIds([])
+      toast({
+        title: 'Blast started',
+        description: res.message,
+        variant: 'success',
+      })
+    },
+    onError: () => toast({ title: 'Blast failed', variant: 'destructive' }),
   })
 
   const bulkPostMutation = useMutation({
@@ -127,9 +156,17 @@ export function PostsPage() {
     )
   }
 
+  function toggleBlastSite(siteId: string) {
+    setBlastSiteIds((prev) =>
+      prev.includes(siteId) ? prev.filter((id) => id !== siteId) : [...prev, siteId]
+    )
+  }
+
   const posts = data?.data ?? []
   const allArticles = articlesData?.data ?? []
   const allSites = sitesData?.data ?? []
+  const allTemplates = templatesData ?? []
+  const activeSites = allSites.filter((s) => s.status === 'active')
 
   const failedCount = posts.filter((p) => p.status === 'failed').length
 
@@ -174,6 +211,10 @@ export function PostsPage() {
               Delete All Failed
             </Button>
           )}
+          <Button size="sm" variant="outline" onClick={() => setBlastOpen(true)} className="border-orange-500 text-orange-600 hover:bg-orange-50">
+            <Zap className="h-4 w-4" />
+            Blast Post
+          </Button>
           <Button size="sm" onClick={() => setPostOpen(true)}>
             <Plus className="h-4 w-4" />
             New Post
@@ -386,6 +427,107 @@ export function PostsPage() {
               {bulkPostMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Post to {selectedSiteIds.length} Site{selectedSiteIds.length !== 1 ? 's' : ''}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Blast Post Dialog */}
+      <Dialog open={blastOpen} onOpenChange={setBlastOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-orange-500" />
+              Blast Post
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Generate a unique article for each selected PBN site and post them all. Every site gets a different article with varied writing style.
+            </p>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Keyword</Label>
+              <Input
+                placeholder="e.g. cara meningkatkan traffic website"
+                value={blastKeyword}
+                onChange={(e) => setBlastKeyword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Template</Label>
+              <Select value={blastTemplateId} onValueChange={setBlastTemplateId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a template" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Target Sites ({blastSiteIds.length} selected)</Label>
+              <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-md border border-input p-2">
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    className="rounded border-input"
+                    checked={blastSiteIds.length === activeSites.length && activeSites.length > 0}
+                    onChange={(e) =>
+                      setBlastSiteIds(e.target.checked ? activeSites.map((s) => s.id) : [])
+                    }
+                  />
+                  Select All Active ({activeSites.length})
+                </label>
+                <div className="my-1 border-t border-border" />
+                {allSites.map((site) => (
+                  <label key={site.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="rounded border-input"
+                      checked={blastSiteIds.includes(site.id)}
+                      onChange={() => toggleBlastSite(site.id)}
+                      disabled={site.status !== 'active'}
+                    />
+                    <span className={site.status !== 'active' ? 'text-muted-foreground line-through' : ''}>
+                      {site.name}
+                    </span>
+                    {site.status !== 'active' && (
+                      <Badge variant="destructive" className="text-[10px] px-1 py-0">{site.status}</Badge>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <div className="flex w-full items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                {blastSiteIds.length} unique articles will be generated
+              </p>
+              <Button
+                onClick={() =>
+                  blastMutation.mutate({
+                    keyword: blastKeyword,
+                    templateId: blastTemplateId,
+                    siteIds: blastSiteIds,
+                  })
+                }
+                disabled={
+                  !blastKeyword.trim() ||
+                  !blastTemplateId ||
+                  blastSiteIds.length === 0 ||
+                  blastMutation.isPending
+                }
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                {blastMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                <Zap className="h-4 w-4" />
+                Blast to {blastSiteIds.length} Site{blastSiteIds.length !== 1 ? 's' : ''}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

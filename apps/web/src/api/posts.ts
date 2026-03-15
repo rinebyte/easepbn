@@ -28,6 +28,25 @@ export interface BulkPostData {
   siteIds: string[]
 }
 
+export interface BlastPostData {
+  keyword: string
+  templateId: string
+  siteIds: string[]
+  variables?: Record<string, string>
+  categoryNames?: string[]
+  tagNames?: string[]
+  spreadWindowMinutes?: number
+}
+
+export interface BlastResult {
+  articlesCreated: number
+  postsQueued: number
+  activeSites: number
+  skippedSites: number
+  keyword: string
+  batchId: string
+}
+
 export interface PostFilters {
   status?: Post['status']
   siteId?: string
@@ -68,6 +87,12 @@ export const postsApi = {
   // Phase 4: Bulk delete posts
   bulkDelete: async (params: { status?: string; siteId?: string; postIds?: string[] }) => {
     const res = await apiClient.post('/posts/bulk-delete', params)
+    return res.data
+  },
+
+  // Blast: generate unique article per site and post to all
+  blastPost: async (data: BlastPostData): Promise<{ success: boolean; message: string; data: BlastResult }> => {
+    const res = await apiClient.post('/posts/blast', data)
     return res.data
   },
 

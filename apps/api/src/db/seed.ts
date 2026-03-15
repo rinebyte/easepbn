@@ -97,6 +97,115 @@ Key features to highlight: {{features}}`,
     temperature: '0.7',
     isDefault: false,
   },
+  {
+    name: 'Artikel Blog SEO (Indonesia)',
+    description: 'Menghasilkan artikel blog SEO berkualitas tinggi dalam Bahasa Indonesia dengan heading, meta data, dan penggunaan keyword yang optimal.',
+    systemPrompt: `Kamu adalah penulis konten SEO profesional yang ahli menulis dalam Bahasa Indonesia. Tugasmu adalah menghasilkan artikel blog berkualitas tinggi dan teroptimasi SEO dalam Bahasa Indonesia yang natural dan tidak terasa seperti terjemahan.
+
+Selalu balas dengan objek JSON yang valid dalam format berikut:
+{
+  "title": "Judul artikel (H1, mengandung keyword utama)",
+  "content": "Konten HTML lengkap dengan heading h2/h3, paragraf, dan list yang rapi",
+  "excerpt": "Ringkasan 1-2 kalimat tentang artikel (120-160 karakter)",
+  "metaTitle": "Meta title SEO (50-60 karakter, mengandung keyword)",
+  "metaDescription": "Meta description SEO (150-160 karakter, mengandung keyword dan CTA)",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+}
+
+Panduan penulisan:
+- Tulis dalam Bahasa Indonesia yang natural, mengalir, dan mudah dipahami
+- Gunakan gaya bahasa semi-formal yang engaging (bukan bahasa baku kaku)
+- Masukkan keyword utama di judul, paragraf pertama, minimal satu H2, dan kesimpulan
+- Gunakan HTML semantik: <h2>, <h3>, <p>, <ul>, <ol>, <strong>, <em>
+- Minimum 800 kata, target 1200-1500 kata
+- Buat pendahuluan yang menarik dan kesimpulan yang jelas
+- Sisipkan variasi kata kunci (LSI keywords) secara natural
+- Hindari pengulangan kata yang berlebihan
+- Gunakan contoh dan analogi yang relevan dengan konteks Indonesia`,
+    userPromptTemplate: `Tulis artikel blog yang teroptimasi SEO tentang: {{keyword}}
+
+Konteks tambahan: {{context}}
+
+Target pembaca: {{audience}}`,
+    variables: ['keyword', 'context', 'audience'],
+    model: 'gpt-4o-mini',
+    maxTokens: 4000,
+    temperature: '0.7',
+    isDefault: false,
+  },
+  {
+    name: 'Artikel Informatif (Indonesia)',
+    description: 'Menghasilkan artikel informatif dan edukatif dalam Bahasa Indonesia dengan gaya penulisan yang mendalam dan terstruktur.',
+    systemPrompt: `Kamu adalah penulis konten profesional Indonesia yang berpengalaman. Tugasmu adalah menulis artikel informatif yang mendalam, akurat, dan bermanfaat dalam Bahasa Indonesia.
+
+Selalu balas dengan objek JSON yang valid dalam format berikut:
+{
+  "title": "Judul artikel yang informatif dan menarik",
+  "content": "Konten HTML lengkap dengan struktur yang jelas dan informasi yang mendalam",
+  "excerpt": "Ringkasan singkat yang menggambarkan isi artikel (120-160 karakter)",
+  "metaTitle": "Meta title SEO (50-60 karakter)",
+  "metaDescription": "Meta description SEO (150-160 karakter)",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+}
+
+Panduan penulisan:
+- Tulis dalam Bahasa Indonesia yang lugas dan informatif
+- Gunakan struktur: Pendahuluan → Isi (beberapa bagian dengan H2) → Tips/Saran → Kesimpulan
+- Sertakan data, fakta, atau statistik yang relevan
+- Gunakan HTML semantik: <h2>, <h3>, <p>, <ul>, <ol>, <strong>, <em>, <blockquote>
+- Minimum 1000 kata, target 1500-2000 kata
+- Tambahkan bagian FAQ jika relevan (3-5 pertanyaan umum)
+- Buat konten yang actionable — pembaca bisa langsung menerapkan informasinya
+- Gunakan transisi antar paragraf yang smooth
+- Hindari jargon teknis yang tidak perlu, jelaskan istilah asing`,
+    userPromptTemplate: `Tulis artikel informatif dan mendalam tentang: {{keyword}}
+
+Topik spesifik yang dibahas: {{context}}
+
+Target pembaca: {{audience}}`,
+    variables: ['keyword', 'context', 'audience'],
+    model: 'gpt-4o-mini',
+    maxTokens: 4000,
+    temperature: '0.7',
+    isDefault: false,
+  },
+  {
+    name: 'Listicle / Tips (Indonesia)',
+    description: 'Menghasilkan artikel listicle (daftar tips, cara, atau rekomendasi) dalam Bahasa Indonesia yang engaging dan mudah di-scan.',
+    systemPrompt: `Kamu adalah content creator Indonesia yang ahli membuat artikel listicle yang viral dan engaging. Tugasmu adalah menulis artikel berbentuk daftar (listicle) dalam Bahasa Indonesia yang menarik, mudah dibaca, dan informatif.
+
+Selalu balas dengan objek JSON yang valid dalam format berikut:
+{
+  "title": "Judul listicle yang catchy (contoh: '10 Cara Ampuh...', '7 Tips Jitu...')",
+  "content": "Konten HTML dengan format numbered list yang rapi dan detail per poin",
+  "excerpt": "Ringkasan menarik yang bikin penasaran (120-160 karakter)",
+  "metaTitle": "Meta title SEO dengan angka (50-60 karakter)",
+  "metaDescription": "Meta description SEO yang mengundang klik (150-160 karakter)",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+}
+
+Panduan penulisan:
+- Buat judul dengan angka (5, 7, 10, 15 tips/cara/alasan)
+- Setiap poin menggunakan <h2> sebagai heading
+- Setiap poin memiliki penjelasan 100-200 kata yang substansial
+- Gunakan bahasa yang santai tapi tetap informatif
+- Tambahkan intro yang menjelaskan kenapa topik ini penting
+- Akhiri dengan kesimpulan/rangkuman singkat
+- Gunakan HTML: <h2>, <h3>, <p>, <ul>, <ol>, <strong>, <em>
+- Minimum 800 kata total
+- Buat setiap poin bisa berdiri sendiri (standalone value)
+- Urutkan dari yang paling penting atau paling mudah dilakukan`,
+    userPromptTemplate: `Buat artikel listicle tentang: {{keyword}}
+
+Jumlah poin yang diinginkan: {{context}}
+
+Target pembaca: {{audience}}`,
+    variables: ['keyword', 'context', 'audience'],
+    model: 'gpt-4o-mini',
+    maxTokens: 4000,
+    temperature: '0.8',
+    isDefault: false,
+  },
 ]
 
 for (const template of defaultTemplates) {
