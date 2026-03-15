@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 
@@ -76,6 +77,7 @@ export function SitesPage() {
   const [testing, setTesting] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
+  const [confirmDeleteSite, setConfirmDeleteSite] = useState<string | null>(null)
 
   // Phase 4: Filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -483,7 +485,7 @@ export function SitesPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => deleteMutation.mutate(site.id)}
+                          onClick={() => setConfirmDeleteSite(site.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -689,6 +691,19 @@ export function SitesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeleteSite !== null}
+        onOpenChange={(open) => !open && setConfirmDeleteSite(null)}
+        title="Delete Site"
+        description="Are you sure? All posts linked to this site will also be deleted. This cannot be undone."
+        confirmLabel="Delete Site"
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (confirmDeleteSite) deleteMutation.mutate(confirmDeleteSite)
+          setConfirmDeleteSite(null)
+        }}
+      />
     </div>
   )
 }

@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/hooks/use-toast'
 
 const emptyForm: BacklinkFormData = {
@@ -31,6 +32,7 @@ export function BacklinksPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingBacklink, setEditingBacklink] = useState<Backlink | null>(null)
   const [form, setForm] = useState<BacklinkFormData>(emptyForm)
+  const [confirmDeleteBacklink, setConfirmDeleteBacklink] = useState<string | null>(null)
 
   const { data: backlinks, isLoading } = useQuery({
     queryKey: ['backlinks'],
@@ -185,7 +187,7 @@ export function BacklinksPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => deleteMutation.mutate(backlink.id)}
+                          onClick={() => setConfirmDeleteBacklink(backlink.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -268,6 +270,19 @@ export function BacklinksPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeleteBacklink !== null}
+        onOpenChange={(open) => !open && setConfirmDeleteBacklink(null)}
+        title="Delete Backlink"
+        description="Are you sure you want to delete this backlink?"
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (confirmDeleteBacklink) deleteMutation.mutate(confirmDeleteBacklink)
+          setConfirmDeleteBacklink(null)
+        }}
+      />
     </div>
   )
 }

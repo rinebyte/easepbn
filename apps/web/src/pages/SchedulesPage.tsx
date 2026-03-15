@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 
@@ -53,6 +54,7 @@ export function SchedulesPage() {
   const [historySchedule, setHistorySchedule] = useState<Schedule | null>(null)
   const [keywordPoolSchedule, setKeywordPoolSchedule] = useState<Schedule | null>(null)
   const [form, setForm] = useState<ScheduleFormData>(emptyForm)
+  const [confirmDeleteSchedule, setConfirmDeleteSchedule] = useState<string | null>(null)
   const [keywordsText, setKeywordsText] = useState('')
   const [keywordImportText, setKeywordImportText] = useState('')
 
@@ -339,7 +341,7 @@ export function SchedulesPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => deleteMutation.mutate(schedule.id)}
+                          onClick={() => setConfirmDeleteSchedule(schedule.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -683,6 +685,19 @@ export function SchedulesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeleteSchedule !== null}
+        onOpenChange={(open) => !open && setConfirmDeleteSchedule(null)}
+        title="Delete Schedule"
+        description="Are you sure? Keywords linked to this schedule will also be deleted. This cannot be undone."
+        confirmLabel="Delete Schedule"
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (confirmDeleteSchedule) deleteMutation.mutate(confirmDeleteSchedule)
+          setConfirmDeleteSchedule(null)
+        }}
+      />
     </div>
   )
 }

@@ -18,6 +18,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/hooks/use-toast'
 
 const emptyForm: TemplateFormData = {
@@ -38,6 +39,7 @@ export function TemplatesPage() {
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewContent, setPreviewContent] = useState('')
+  const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [form, setForm] = useState<TemplateFormData>(emptyForm)
 
@@ -206,7 +208,7 @@ export function TemplatesPage() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={() => deleteMutation.mutate(template.id)}
+                    onClick={() => setConfirmDeleteTemplate(template.id)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -345,6 +347,19 @@ export function TemplatesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeleteTemplate !== null}
+        onOpenChange={(open) => !open && setConfirmDeleteTemplate(null)}
+        title="Delete Template"
+        description="Are you sure you want to delete this template? Schedules using it will need a new template."
+        confirmLabel="Delete Template"
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (confirmDeleteTemplate) deleteMutation.mutate(confirmDeleteTemplate)
+          setConfirmDeleteTemplate(null)
+        }}
+      />
     </div>
   )
 }

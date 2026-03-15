@@ -20,6 +20,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 
@@ -44,6 +45,9 @@ export function PostsPage() {
   const [blastKeyword, setBlastKeyword] = useState('')
   const [blastTemplateId, setBlastTemplateId] = useState('')
   const [blastSiteIds, setBlastSiteIds] = useState<string[]>([])
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [confirmUnpublish, setConfirmUnpublish] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['posts', statusFilter, siteFilter],
@@ -202,7 +206,7 @@ export function PostsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => bulkDeleteMutation.mutate()}
+              onClick={() => setConfirmBulkDelete(true)}
               disabled={bulkDeleteMutation.isPending}
               className="text-destructive"
             >
@@ -333,7 +337,7 @@ export function PostsPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-orange-500 hover:text-orange-500"
-                            onClick={() => unpublishMutation.mutate(post.id)}
+                            onClick={() => setConfirmUnpublish(post.id)}
                             disabled={unpublishMutation.isPending}
                             title="Unpublish from WordPress"
                           >
@@ -348,7 +352,7 @@ export function PostsPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => deleteMutation.mutate(post.id)}
+                          onClick={() => setConfirmDelete(post.id)}
                           title="Delete record"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -430,6 +434,49 @@ export function PostsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Confirm Delete */}
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+        title="Delete Post"
+        description="Are you sure you want to delete this post record? This action cannot be undone."
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (confirmDelete) deleteMutation.mutate(confirmDelete)
+          setConfirmDelete(null)
+        }}
+      />
+
+      {/* Confirm Bulk Delete */}
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        onOpenChange={setConfirmBulkDelete}
+        title="Delete All Failed Posts"
+        description="Are you sure you want to delete all failed posts? This action cannot be undone."
+        confirmLabel="Delete All"
+        loading={bulkDeleteMutation.isPending}
+        onConfirm={() => {
+          bulkDeleteMutation.mutate()
+          setConfirmBulkDelete(false)
+        }}
+      />
+
+      {/* Confirm Unpublish */}
+      <ConfirmDialog
+        open={confirmUnpublish !== null}
+        onOpenChange={(open) => !open && setConfirmUnpublish(null)}
+        title="Unpublish Post"
+        description="This will remove the post from WordPress. The local record will be kept."
+        confirmLabel="Unpublish"
+        variant="destructive"
+        loading={unpublishMutation.isPending}
+        onConfirm={() => {
+          if (confirmUnpublish) unpublishMutation.mutate(confirmUnpublish)
+          setConfirmUnpublish(null)
+        }}
+      />
 
       {/* Blast Post Dialog */}
       <Dialog open={blastOpen} onOpenChange={setBlastOpen}>

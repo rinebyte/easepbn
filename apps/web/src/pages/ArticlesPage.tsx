@@ -20,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 
@@ -41,6 +42,7 @@ export function ArticlesPage() {
   const [generateOpen, setGenerateOpen] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [viewArticle, setViewArticle] = useState<Article | null>(null)
+  const [confirmDeleteArticle, setConfirmDeleteArticle] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
 
   // Generate form state
@@ -195,7 +197,7 @@ export function ArticlesPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => deleteMutation.mutate(article.id)}
+                          onClick={() => setConfirmDeleteArticle(article.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -351,6 +353,19 @@ export function ArticlesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeleteArticle !== null}
+        onOpenChange={(open) => !open && setConfirmDeleteArticle(null)}
+        title="Delete Article"
+        description="Are you sure? Related posts will also be deleted. This cannot be undone."
+        confirmLabel="Delete Article"
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (confirmDeleteArticle) deleteMutation.mutate(confirmDeleteArticle)
+          setConfirmDeleteArticle(null)
+        }}
+      />
     </div>
   )
 }
