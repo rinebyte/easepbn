@@ -12,6 +12,7 @@ export interface Schedule {
   categoryNames: string[]
   tagNames: string[]
   postsPerExecution: number
+  contentBrief: string | null
   spreadWindowMinutes: number
   uniqueArticlePerSite: boolean
   lastRunAt: string | null
@@ -33,6 +34,7 @@ export interface ScheduleFormData {
   categoryNames?: string[]
   tagNames?: string[]
   postsPerExecution: number
+  contentBrief?: string
   spreadWindowMinutes?: number
   uniqueArticlePerSite?: boolean
 }

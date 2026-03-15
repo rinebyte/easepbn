@@ -60,8 +60,8 @@ export function ArticlesPage() {
   const articlesPerPage = 20
 
   // Generate form state
-  const [genForm, setGenForm] = useState({ templateId: '', keyword: '' })
-  const [bulkForm, setBulkForm] = useState({ templateId: '', keywords: '' })
+  const [genForm, setGenForm] = useState({ templateId: '', keyword: '', contentBrief: '' })
+  const [bulkForm, setBulkForm] = useState({ templateId: '', keywords: '', contentBrief: '' })
 
   const { data, isLoading } = useQuery({
     queryKey: ['articles', articlesPage, tab, search],
@@ -79,7 +79,7 @@ export function ArticlesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['articles'] })
       setGenerateOpen(false)
-      setGenForm({ templateId: '', keyword: '' })
+      setGenForm({ templateId: '', keyword: '', contentBrief: '' })
       toast({ title: 'Article generation queued', variant: 'success' })
     },
     onError: () => toast({ title: 'Generation failed', variant: 'destructive' }),
@@ -90,7 +90,7 @@ export function ArticlesPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['articles'] })
       setBulkOpen(false)
-      setBulkForm({ templateId: '', keywords: '' })
+      setBulkForm({ templateId: '', keywords: '', contentBrief: '' })
       toast({ title: `${data.jobCount ?? 0} articles queued`, variant: 'success' })
     },
     onError: () => toast({ title: 'Bulk generation failed', variant: 'destructive' }),
@@ -318,10 +318,26 @@ export function ArticlesPage() {
                 placeholder="best coffee makers 2025"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="gen-brief">Content Brief (optional)</Label>
+              <Textarea
+                id="gen-brief"
+                value={genForm.contentBrief}
+                onChange={(e) => setGenForm({ ...genForm, contentBrief: e.target.value })}
+                placeholder={"Describe the brand, product, or topic so AI understands the context.\n\nExample: BrandX is a SaaS company that offers SEO tools for small businesses in Indonesia..."}
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground">
+                Helps the AI understand what the keyword is about (brand info, product details, etc.)
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button
-              onClick={() => generateMutation.mutate(genForm)}
+              onClick={() => generateMutation.mutate({
+                ...genForm,
+                contentBrief: genForm.contentBrief || undefined,
+              })}
               disabled={!genForm.templateId || !genForm.keyword || generateMutation.isPending}
             >
               {generateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -363,11 +379,21 @@ export function ArticlesPage() {
                 value={bulkForm.keywords}
                 onChange={(e) => setBulkForm({ ...bulkForm, keywords: e.target.value })}
                 placeholder={"best coffee makers\nbest espresso machines\nbest grinders"}
-                rows={8}
+                rows={6}
               />
               <p className="text-xs text-muted-foreground">
                 {bulkForm.keywords.split('\n').filter((k) => k.trim()).length} keywords entered
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bulk-brief">Content Brief (optional)</Label>
+              <Textarea
+                id="bulk-brief"
+                value={bulkForm.contentBrief}
+                onChange={(e) => setBulkForm({ ...bulkForm, contentBrief: e.target.value })}
+                placeholder="Describe the brand, product, or niche so AI has proper context for all keywords..."
+                rows={3}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -376,6 +402,7 @@ export function ArticlesPage() {
                 bulkMutation.mutate({
                   templateId: bulkForm.templateId,
                   keywords: bulkForm.keywords.split('\n').filter((k) => k.trim()),
+                  contentBrief: bulkForm.contentBrief || undefined,
                 })
               }
               disabled={!bulkForm.templateId || !bulkForm.keywords.trim() || bulkMutation.isPending}

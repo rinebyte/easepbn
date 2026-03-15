@@ -135,6 +135,7 @@ export function createScheduledExecutionWorker() {
                 keyword,
                 variables: {},
                 variationInstructions,
+                contentBrief: schedule.contentBrief ?? undefined,
               },
               {
                 attempts: 2,
@@ -199,6 +200,7 @@ export function createScheduledExecutionWorker() {
               templateId: schedule.templateId,
               keyword,
               variables: {},
+              contentBrief: schedule.contentBrief ?? undefined,
             },
             {
               attempts: 2,

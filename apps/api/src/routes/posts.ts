@@ -418,6 +418,7 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
             keyword,
             variables: body.variables ?? {},
             variationInstructions,
+            contentBrief: body.contentBrief ?? undefined,
           },
           {
             attempts: 2,
@@ -479,6 +480,7 @@ export const postsRoutes = new Elysia({ prefix: '/posts' })
         variables: t.Optional(t.Record(t.String(), t.String())),
         categoryNames: t.Optional(t.Array(t.String())),
         tagNames: t.Optional(t.Array(t.String())),
+        contentBrief: t.Optional(t.String()),
       }),
     }
   )

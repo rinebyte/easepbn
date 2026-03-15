@@ -38,6 +38,7 @@ export interface BlastPostData {
   categoryNames?: string[]
   tagNames?: string[]
   spreadWindowMinutes?: number
+  contentBrief?: string
 }
 
 export interface BlastResult {

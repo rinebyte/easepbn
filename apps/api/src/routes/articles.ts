@@ -171,6 +171,7 @@ export const articlesRoutes = new Elysia({ prefix: '/articles' })
           templateId: body.templateId,
           keyword: body.keyword,
           variables: body.variables ?? {},
+          contentBrief: body.contentBrief ?? undefined,
         },
         {
           attempts: 2,
@@ -189,6 +190,7 @@ export const articlesRoutes = new Elysia({ prefix: '/articles' })
         templateId: t.String(),
         keyword: t.String({ minLength: 1 }),
         variables: t.Optional(t.Record(t.String(), t.String())),
+        contentBrief: t.Optional(t.String()),
       }),
     }
   )
@@ -218,6 +220,7 @@ export const articlesRoutes = new Elysia({ prefix: '/articles' })
             templateId: item.templateId ?? body.templateId,
             keyword: item.keyword,
             variables: item.variables ?? {},
+            contentBrief: body.contentBrief ?? undefined,
           },
           {
             attempts: 2,
@@ -237,6 +240,7 @@ export const articlesRoutes = new Elysia({ prefix: '/articles' })
     {
       body: t.Object({
         templateId: t.Optional(t.String()),
+        contentBrief: t.Optional(t.String()),
         items: t.Array(
           t.Object({
             keyword: t.String({ minLength: 1 }),

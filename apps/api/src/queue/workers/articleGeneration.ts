@@ -18,13 +18,14 @@ interface ArticleGenerationJob {
   keyword: string
   variables?: Record<string, string>
   variationInstructions?: string // Phase 5: content diversity
+  contentBrief?: string // Context about the keyword (brand info, product details, etc.)
 }
 
 export function createArticleGenerationWorker() {
   const worker = new Worker<ArticleGenerationJob>(
     'article-generation',
     async (job) => {
-      const { articleId, templateId, keyword, variables = {}, variationInstructions } = job.data
+      const { articleId, templateId, keyword, variables = {}, variationInstructions, contentBrief } = job.data
       const startTime = Date.now()
 
       console.log(`[ArticleWorker] Processing article ${articleId} for keyword: ${keyword}`)
@@ -59,6 +60,11 @@ export function createArticleGenerationWorker() {
 
       // Replace any remaining unreplaced variables with empty string
       userPrompt = userPrompt.replace(/\{\{(\w+)\}\}/g, '')
+
+      // Inject content brief — provides context about keywords (brand, product, niche info)
+      if (contentBrief?.trim()) {
+        userPrompt += `\n\n--- CONTENT BRIEF / CONTEXT ---\nUse the following information as reference when writing the article. This describes the topic, brand, or product the keyword refers to:\n\n${contentBrief.trim()}\n--- END CONTENT BRIEF ---`
+      }
 
       // Fetch active backlinks and add instructions to prompt
       const backlinkRules = await getActiveBacklinks()

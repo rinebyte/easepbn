@@ -80,6 +80,7 @@ export const schedulesRoutes = new Elysia({ prefix: '/schedules' })
         postsPerExecution: t.Optional(t.Number({ minimum: 1 })),
         spreadWindowMinutes: t.Optional(t.Number({ minimum: 1 })),
         uniqueArticlePerSite: t.Optional(t.Boolean()),
+        contentBrief: t.Optional(t.String()),
       }),
     }
   )
@@ -136,6 +137,7 @@ export const schedulesRoutes = new Elysia({ prefix: '/schedules' })
         postsPerExecution: t.Optional(t.Number({ minimum: 1 })),
         spreadWindowMinutes: t.Optional(t.Number({ minimum: 1 })),
         uniqueArticlePerSite: t.Optional(t.Boolean()),
+        contentBrief: t.Optional(t.String()),
       }),
     }
   )

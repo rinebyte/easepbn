@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Pagination } from '@/components/ui/pagination'
@@ -59,6 +60,7 @@ export function PostsPage() {
   const [blastKeyword, setBlastKeyword] = useState('')
   const [blastTemplateId, setBlastTemplateId] = useState('')
   const [blastSiteIds, setBlastSiteIds] = useState<string[]>([])
+  const [blastContentBrief, setBlastContentBrief] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [confirmUnpublish, setConfirmUnpublish] = useState<string | null>(null)
@@ -98,6 +100,7 @@ export function PostsPage() {
       setBlastKeyword('')
       setBlastTemplateId('')
       setBlastSiteIds([])
+      setBlastContentBrief('')
       toast({
         title: 'Blast started',
         description: res.message,
@@ -555,6 +558,18 @@ export function PostsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label>Content Brief (optional)</Label>
+                <Textarea
+                  value={blastContentBrief}
+                  onChange={(e) => setBlastContentBrief(e.target.value)}
+                  placeholder={"Describe the brand/product so AI understands what the keyword is about.\n\nExample: BrandX is a SaaS platform for local SEO..."}
+                  rows={3}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Helps AI write accurate content about your brand or topic
+                </p>
+              </div>
+              <div className="space-y-2">
                 <Label>Target Sites ({blastSiteIds.length} selected)</Label>
                 <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-md border border-input p-2">
                   <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
@@ -600,6 +615,7 @@ export function PostsPage() {
                       keyword: blastKeyword,
                       templateId: blastTemplateId,
                       siteIds: blastSiteIds,
+                      contentBrief: blastContentBrief || undefined,
                     })
                   }
                   disabled={

@@ -1,5 +1,5 @@
 // src/db/schema/schedules.ts
-import { pgTable, uuid, varchar, boolean, timestamp, integer, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, boolean, timestamp, integer, jsonb, text } from 'drizzle-orm/pg-core'
 import { templates } from './templates'
 
 export const schedules = pgTable('schedules', {
@@ -21,6 +21,8 @@ export const schedules = pgTable('schedules', {
   totalRuns: integer('total_runs').default(0).notNull(),
   totalArticlesGenerated: integer('total_articles_generated').default(0).notNull(),
   totalPostsCreated: integer('total_posts_created').default(0).notNull(),
+  // Content brief — context about the keywords (brand info, product details, etc.)
+  contentBrief: text('content_brief'),
   // Phase 5: Content diversity
   spreadWindowMinutes: integer('spread_window_minutes').default(240).notNull(),
   uniqueArticlePerSite: boolean('unique_article_per_site').default(false).notNull(),

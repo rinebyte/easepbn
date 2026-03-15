@@ -23,12 +23,14 @@ export interface GenerateArticleData {
   templateId: string
   keyword: string
   variables?: Record<string, string>
+  contentBrief?: string
 }
 
 export interface BulkGenerateData {
   templateId: string
   keywords: string[]
   variables?: Record<string, string>
+  contentBrief?: string
 }
 
 export const articlesApi = {
@@ -64,6 +66,7 @@ export const articlesApi = {
   bulkGenerateArticles: async (data: BulkGenerateData) => {
     const res = await apiClient.post('/articles/bulk-generate', {
       templateId: data.templateId,
+      contentBrief: data.contentBrief,
       items: data.keywords.map(keyword => ({
         keyword,
         variables: data.variables,

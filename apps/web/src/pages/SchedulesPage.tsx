@@ -43,6 +43,7 @@ const emptyForm: ScheduleFormData = {
   categoryNames: [],
   tagNames: [],
   postsPerExecution: 1,
+  contentBrief: '',
   spreadWindowMinutes: 240,
   uniqueArticlePerSite: false,
 }
@@ -175,6 +176,7 @@ export function SchedulesPage() {
       categoryNames: schedule.categoryNames,
       tagNames: schedule.tagNames,
       postsPerExecution: schedule.postsPerExecution,
+      contentBrief: schedule.contentBrief ?? '',
       spreadWindowMinutes: schedule.spreadWindowMinutes ?? 240,
       uniqueArticlePerSite: schedule.uniqueArticlePerSite ?? false,
     })
@@ -436,6 +438,18 @@ export function SchedulesPage() {
               />
               <p className="text-xs text-muted-foreground">
                 {keywordsText.split('\n').filter((k) => k.trim()).length} keywords (use Keyword Pool for LRU rotation)
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Content Brief (optional)</Label>
+              <Textarea
+                value={form.contentBrief ?? ''}
+                onChange={(e) => setForm({ ...form, contentBrief: e.target.value })}
+                placeholder={"Describe the brand, product, or niche so AI has context when generating articles from these keywords.\n\nExample: BrandX is a SaaS platform for local SEO based in Jakarta..."}
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                This context is appended to every article prompt, helping AI understand what your keywords are about
               </p>
             </div>
             <div className="space-y-2">
